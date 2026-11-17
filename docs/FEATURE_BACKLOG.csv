@@ -1,6 +1,6 @@
 id,area,feature,release,milestone,depends_on,acceptance_criteria,reference,status
 F001,Foundation,Unified item and revision contracts,R1,M0,,Assets notes bookmarks and records use stable IDs and expected revisions,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
-F002,Foundation,Windows and macOS shell experiment,R1,M0,F001,Real local image and video preview plus keyboard selection runs on both platforms,P06,Planned
+F002,Foundation,Windows and macOS shell experiment,R1,M0,F001,Real local image and video preview plus keyboard selection runs on both platforms,P06,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F003,Android,Share and process-death experiment,R1,M0,F001,Shared image text and video survive restart and URI access expiry,P01;P03,Planned
 F004,Sync,Conflict semantics experiment,R1,M0,F001,Two offline replicas preserve conflicting notes sets and delete-edit alternatives,Proposed,Planned
 F005,Migration,Eagle walkthrough and fixture mapping,R1,M0,,Installed version and mapped or unmapped fields are recorded against a sample library,E11;E16;E17,Planned
@@ -17,7 +17,7 @@ F015,Organization,Nested collections and multiple membership,R1,M1,F011,Removing
 F016,Organization,Tags groups recent and favorite tags,R1,M1,F011,Tags and groups persist and queries return correct memberships,E13;E14;E20,Prototype partial - see IMPLEMENTATION_STATUS.md
 F017,Organization,Tag rename merge and undo,R1,M1,F016,Affected references update and a reversible history entry is recorded,E13,Planned
 F018,Organization,Metadata editing and ratings,R1,M1,F011,Editable title source description and ratings retain revisions,E11,Prototype partial - see IMPLEMENTATION_STATUS.md
-F019,Organization,Bulk edits with mixed-value states,R1,M1,F015;F016;F018,Add remove and replace behave distinctly and batch undo restores state,E02,Planned
+F019,Organization,Bulk edits with mixed-value states,R1,M1,F015;F016;F018,Add remove and replace behave distinctly and batch undo restores state,E02,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F020,Automation,Deterministic collection/type/source tagging rules,R1,M1,F016;F011,Rule execution is idempotent and distinguishable from AI suggestions,E01,Planned
 F021,Media,Persistent preview and extraction jobs,R1,M1,F010;F011,Corrupt inputs fail independently with retry and bounded resource use,Proposed,Planned
 F022,Media,Common images and GIF viewer,R1,M1,F021,JPEG PNG WebP GIF render and animation pause works on certified devices,E01,Prototype partial - see IMPLEMENTATION_STATUS.md
@@ -53,7 +53,7 @@ F051,Sync,Resumable verified media transfers,R1,M3,F050;F010,Interrupted multi-G
 F052,Sync,Conflict queue and resolution UI,R1,M3,F050;F039,Notes scalar fields media and delete-edit conflicts preserve alternatives,Proposed,Planned
 F053,Sync,Selective sync and offline pinning,R1,M3,F051,Metadata visible without originals and pinned content remains offline,Proposed,Planned
 F054,History,Change sets named checkpoints and restore,R1,M3,F032;F050,Restore is a new revision and checkpoint reports blob availability,Proposed,Planned
-F055,Recovery,Consistent backup and clean-device restore,R1,M3,F054;F048,Originals relations schemas pending edits and outbox survive restoration,Proposed,Planned
+F055,Recovery,Consistent backup and clean-device restore,R1,M3,F054;F048,Originals relations schemas pending edits and outbox survive restoration,Proposed,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F056,Recovery,Retention tombstones and garbage collection,R1,M3,F055;F050,Retained versions are not collected and stale devices cannot resurrect deletes,Proposed,Planned
 F057,Android,Offline library navigation and local search,R1,M3,F003;F033;F053,Cached items load without network and unsupported originals are explicit,P02,Planned
 F058,Android,Share sheet durable capture and imports,R1,M3,F003;F012;F051,Accepted shared bytes survive app death and sync without duplicates,P01;P03,Planned
@@ -65,9 +65,9 @@ F063,Chrome,MV3 native bridge and persistent capture queue,R1,M3,F011,Worker ter
 F064,Chrome,Image link text and bookmark capture,R1,M3,F063;F012,Source URL title excerpt and selected collection arrive intact,E10,Planned
 F065,Chrome,Batch image selection filters and deduplication,R1,M3,F064;F014,Selected candidates import once with truthful success/failure counts,E10,Planned
 F066,Chrome,Visible area and region screenshot capture,R1,M3,F063,Captured region matches selection and is linked to source page,E10,Planned
-F067,AI,Built-in provider setup capabilities and secret storage,R1,M4,F011,Local and opted-in remote provider tests expose supported tasks only,E07;A03;A04,Planned
-F068,AI,Durable jobs proposals stale-result detection and undo,R1,M4,F067;F054,Retry is idempotent and changed inputs prevent silent application,Proposed,Planned
-F069,AI,Image descriptions and suggested filenames,R1,M4,F068;F022,Human text is preserved and model provenance accompanies proposals,E05,Planned
+F067,AI,Built-in provider setup capabilities and secret storage,R1,M4,F011,Local and opted-in remote provider tests expose supported tasks only,E07;A03;A04,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
+F068,AI,Durable jobs proposals stale-result detection and undo,R1,M4,F067;F054,Retry is idempotent and changed inputs prevent silent application,Proposed,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
+F069,AI,Image descriptions and suggested filenames,R1,M4,F068;F022,Human text is preserved and model provenance accompanies proposals,E05,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F070,AI,Controlled-vocabulary tagging and categorization,R1,M4,F068;F016;F015,Suggestions follow selected vocabulary and existing collection constraints,E05,Planned
 F071,AI,OCR and extracted-text indexing,R1,M4,F068;F026;F033,Extracted content remains separate from user notes and links to source,Proposed,Planned
 F072,AI,Semantic text index and retrieval,R1,M4,F067;F033;F035,Embedding version stored and metadata-semantic matches are labeled,E06;E08,Planned

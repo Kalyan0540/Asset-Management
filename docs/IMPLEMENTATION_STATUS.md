@@ -19,7 +19,7 @@ See [Getting Started](GETTING_STARTED.md) for nontechnical installation instruct
 
 ## Testing
 
-Local checks cover formatting, TypeScript/production build, nine integration tests across persistence, conflicts, import/export, backup/restore, bulk transactions, AI review and real MCP stdio clients. Browser tests include the original desktop/mobile-size workflows plus bulk edits and the larger preview. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs repeat the checks and additionally test the packaged application on macOS/Windows, including native backup/restore.
+Local checks cover formatting, TypeScript/production build, nine integration tests across persistence, conflicts, import/export, backup/restore, bulk transactions, AI review and real MCP stdio clients. Browser tests include the original desktop/mobile-size workflows plus bulk edits and the larger preview. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs repeat the checks and additionally test the packaged application on macOS/Windows, including native backup/restore and a real MCP client launched through the bundled runtime.
 
 AI tests use a deterministic local HTTP model fixture. They establish protocol, review and integrity behavior; they do not establish real-model caption accuracy or hardware performance. An installed Ollama vision model is needed to analyze actual pictures. No hosted inference is enabled by default.
 

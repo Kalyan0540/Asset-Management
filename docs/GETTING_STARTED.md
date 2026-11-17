@@ -1,6 +1,6 @@
 # Start using Atlas
 
-Atlas is now being packaged as a normal desktop app. You do not need Node, a terminal, Git, or programming knowledge to use the desktop download.
+Atlas is a desktop app for macOS and Windows. You do not need Node, a terminal, Git, or programming knowledge to use the desktop download.
 
 **This is an early release, not the whole Eagle replacement yet.** Use a small collection to try it first, and keep your original files. Android and automatic synchronization between devices are not available in this release.
 

@@ -48,14 +48,14 @@ Implementation now uses `feat/library-foundation`. The remote advertised no bran
 
 Before a first push, inspect the remote branch state so existing history is preserved. An empty remote may need an initial branch rather than a pull request. No force push or assumption about an empty remote is needed.
 
-The deliverables now include a runnable local prototype and tests in addition to documents. There is no deployed public site, product sync server or native Android build. Run the source on your machine using the README instructions; a cloud development process is not automatically available from your laptop's `localhost`.
+The deliverables now include the desktop application source, tests, and installer automation in addition to documents. Published installers are available from [GitHub Releases](https://github.com/Kalyan0540/Asset-Management/releases), with [simple installation instructions](GETTING_STARTED.md). The source-code ZIP is not the app installer. There is no deployed public site, product sync server or native Android build. A cloud development process is not automatically available from your laptop's `localhost`.
 
 ## Three different meanings of cloud
 
 | Place | Purpose | What it currently contains |
 |---|---|---|
 | Codex cloud workspace | A remote working machine for researching/editing/building | The source, tests and documents listed above |
-| GitHub repository | Versioned project source and documentation after pushing | Delivery branch: `feat/library-foundation`; see final delivery for verified commit |
+| GitHub repository and Releases | Versioned project source, documents and published app downloads | Delivery branch: `feat/library-foundation`; downloads appear under Releases after all platform checks pass |
 | Future library sync service | Sync your personal assets, notes and metadata across devices | Proposed architecture only; not implemented |
 
 Publishing the project source on GitHub will not automatically upload your personal Eagle library. The future app's storage and synchronization need their own implementation and configuration. GitHub can review source and Markdown changes; it is not a replacement for conflict-safe live database or large-media synchronization.
