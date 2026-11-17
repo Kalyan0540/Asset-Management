@@ -1,9 +1,11 @@
-import { app, BrowserWindow, Menu, dialog, shell, session } from 'electron';
+import { app, BrowserWindow, Menu, dialog, shell, session, clipboard } from 'electron';
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { once } from 'node:events';
 import { createLibraryServer } from '../server/http.ts';
 import { createBackup, restoreBackup } from '../server/backup.ts';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 let window: BrowserWindow | null = null;
 let service: ReturnType<typeof createLibraryServer> | undefined;
@@ -36,6 +38,11 @@ async function openLibrary(path: string) {
     previous.server.closeAllConnections();
   }
   savePath();
+  writeFileSync(
+    join(app.getPath('userData'), 'connection.json'),
+    JSON.stringify({ url: origin, library: root }),
+    { mode: 0o600 },
+  );
   if (window) await window.loadURL(origin);
 }
 async function operation(fn: () => Promise<void>) {
@@ -136,6 +143,30 @@ function menu() {
     },
     { role: 'editMenu' },
     {
+      label: 'Agents',
+      submenu: [
+        {
+          label: 'Copy Read-only MCP Configuration',
+          click: () => {
+            const args = app.isPackaged ? ['--mcp'] : [app.getAppPath(), '--mcp'];
+            clipboard.writeText(
+              JSON.stringify(
+                { mcpServers: { atlas: { command: process.execPath, args } } },
+                null,
+                2,
+              ),
+            );
+            void dialog.showMessageBox(window!, {
+              type: 'info',
+              message: 'Agent configuration copied.',
+              detail:
+                'Paste it into the MCP settings of your agent app. Keep Atlas open while the agent uses your library. This configuration exposes search and read tools only.',
+            });
+          },
+        },
+      ],
+    },
+    {
       label: 'View',
       submenu: [
         { role: 'reload' },
@@ -231,6 +262,35 @@ app
       await createBackup(service!.library, testBackup);
       await restoreBackup(testBackup, join(app.getPath('userData'), `Smoke Restore ${Date.now()}`));
       console.log('DESKTOP_SMOKE_OK');
+      const client = new Client({ name: 'packaged-smoke', version: '1.0.0' });
+      const transport = new StdioClientTransport({
+        command: process.execPath,
+        args: [
+          ...(process.platform === 'linux'
+            ? ['--no-sandbox', '--ozone-platform=headless', '--disable-gpu']
+            : []),
+          ...(app.isPackaged ? ['--mcp'] : [app.getAppPath(), '--mcp']),
+        ],
+        env: {
+          ...Object.fromEntries(
+            Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
+          ),
+          ATLAS_USER_DATA: app.getPath('userData'),
+        },
+        stderr: 'inherit',
+      });
+      try {
+        await client.connect(transport);
+        const result = await client.callTool({
+          name: 'search_library',
+          arguments: { query: 'Desktop smoke test', limit: 5 },
+        });
+        if (!JSON.stringify(result).includes('Desktop smoke test'))
+          throw new Error('Packaged MCP search failed');
+      } finally {
+        await client.close();
+      }
+      console.log('DESKTOP_MCP_OK');
       app.exit(0);
     }
   })

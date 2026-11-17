@@ -37,6 +37,8 @@ To build the desktop app from source, run `npm run desktop`. To package it for y
 
 ## Use with a local agent
 
+**Installed desktop app:** choose **Agents → Copy Read-only MCP Configuration**, then paste that configuration into your agent's MCP settings. Keep Atlas open. The installed app includes its own adapter, so no Node installation or source checkout is needed. The instructions below are for source-development use.
+
 Start the library service first. Configure your MCP client to launch the adapter from this repository. Replace the absolute paths below with your installation paths; `node` must resolve to Node 24+:
 
 ```json
@@ -56,7 +58,7 @@ Start the library service first. Configure your MCP client to launch the adapter
 
 The adapter exposes `search_library` and `read_item`. To deliberately enable reversible metadata/note writes, add `"ATLAS_MCP_WRITE": "1"`; this also exposes `update_item` and `create_note`. Updates require the current `expectedRevision` and reject conflicts. This is a whole-library capability, not per-folder permission management. The adapter reads the local `agent-token` file; keep it private. Client configuration wrappers vary by MCP client.
 
-On Windows, use a file URL for the `--import` loader argument, for example `file:///C:/Projects/Asset-Management/node_modules/tsx/dist/loader.mjs`, and normal absolute paths for the script and library directory. In the desktop app, use **Library → Show Library Folder** to locate its token; the desktop service uses a dynamically assigned port, so the source-development MCP example above does not automatically connect to a desktop instance.
+On Windows, use a file URL for the source-development `--import` loader argument, for example `file:///C:/Projects/Asset-Management/node_modules/tsx/dist/loader.mjs`, and normal absolute paths for the script and library directory. The desktop adapter discovers its current library and port automatically from the running app.
 
 For development, `npm run mcp` starts the same stdio adapter. Do not log ordinary text to its stdout: stdout carries protocol messages. The HTTP API accepts the private token as a Bearer credential, and the browser uses an HttpOnly, SameSite session cookie.
 

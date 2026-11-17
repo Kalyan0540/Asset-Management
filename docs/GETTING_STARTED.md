@@ -55,4 +55,6 @@ Select a note or a PNG/JPEG/WebP image and click **Suggest tags & description**.
 
 ## What remains in development
 
+If you use a local AI agent that supports MCP, choose **Agents → Copy Read-only MCP Configuration** in Atlas. Paste it into the agent's MCP settings and leave Atlas open. This lets the agent search and read the library without giving it edit tools; no developer installation is required for this connection.
+
 Automatic multi-device sync, Android, the Chrome capture extension, Eagle library import, advanced note/table features, large-library performance work, and many specialist file previews remain pending. The table currently displays asset metadata; it is not yet a complete Notion-style database. The graph shows explicit relations; it does not yet parse every Obsidian-style link. These limits are recorded in the [implementation status](IMPLEMENTATION_STATUS.md) and full [project plan](PROJECT_PLAN.md).
