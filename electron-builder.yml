@@ -13,6 +13,8 @@ extraResources:
   - from: desktop-build
     to: agent
     filter: ['entry.mjs', 'mcp.mjs']
+  - from: desktop-build/THIRD_PARTY_NOTICES.txt
+    to: THIRD_PARTY_NOTICES.txt
 asar: true
 npmRebuild: false
 mac:

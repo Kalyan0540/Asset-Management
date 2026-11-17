@@ -1,7 +1,6 @@
 name: Build desktop downloads
 on:
   push:
-    branches: [feat/library-foundation]
     tags: ['v*']
   workflow_dispatch:
 permissions:
@@ -25,6 +24,7 @@ jobs:
             platform: win
             arch: x64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -29,3 +29,5 @@ await build({
     js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
   },
 });
+
+await import('./third-party-notices.mjs');

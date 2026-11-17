@@ -1,8 +1,10 @@
-# Atlas 0.2.0 — early desktop release
+# Atlas 0.2.1 — early desktop release
 
 This release turns the browser prototype into a downloadable desktop application for Apple-chip Macs, Intel Macs, and 64-bit Windows computers. The installer includes the runtime; no developer setup is needed.
 
 **It is not the completed Eagle replacement.** This release is intended for trying a small personal library while the remaining platform, synchronization and advanced features are developed. Keep your originals and make backups.
+
+This patch includes the bundled components’ license notices, available in **Help → Open-source Notices**.
 
 ## Included
 
@@ -15,9 +17,9 @@ This release turns the browser prototype into a downloadable desktop application
 
 ## Download
 
-- Apple-chip Mac: `Atlas-0.2.0-mac-arm64.dmg`
-- Intel Mac: `Atlas-0.2.0-mac-x64.dmg`
-- Windows Intel/AMD: `Atlas-0.2.0-win-x64.exe`
+- Apple-chip Mac: `Atlas-0.2.1-mac-arm64.dmg`
+- Intel Mac: `Atlas-0.2.1-mac-x64.dmg`
+- Windows Intel/AMD: `Atlas-0.2.1-win-x64.exe`
 
 [Simple installation and first-use instructions](https://github.com/Kalyan0540/Asset-Management/blob/feat/library-foundation/docs/GETTING_STARTED.md)
 

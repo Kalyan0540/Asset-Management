@@ -192,6 +192,13 @@ function menu() {
             ),
         },
         {
+          label: 'Open-source Notices',
+          click: () =>
+            void shell.openPath(
+              join(app.isPackaged ? process.resourcesPath : __dirname, 'THIRD_PARTY_NOTICES.txt'),
+            ),
+        },
+        {
           label: 'Downloads and Updates',
           click: () =>
             void shell.openExternal('https://github.com/Kalyan0540/Asset-Management/releases'),
