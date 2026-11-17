@@ -11,12 +11,12 @@ await build({
 });
 await build({
   entryPoints: ['desktop/entry.ts'],
-  outfile: 'desktop-build/entry.cjs',
+  outfile: 'desktop-build/entry.mjs',
   bundle: true,
   platform: 'node',
-  format: 'cjs',
+  format: 'esm',
   target: 'node24',
-  external: ['electron'],
+  external: ['./mcp.mjs'],
 });
 await build({
   entryPoints: ['server/mcp.ts'],

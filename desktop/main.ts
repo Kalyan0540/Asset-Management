@@ -84,6 +84,16 @@ async function chooseLibrary(create: boolean) {
     );
   await openLibrary(path);
 }
+function agentConfiguration() {
+  return {
+    command: process.execPath,
+    args: [join(app.isPackaged ? join(process.resourcesPath, 'agent') : __dirname, 'entry.mjs')],
+    env: {
+      ELECTRON_RUN_AS_NODE: '1',
+      ATLAS_CONNECTION_FILE: join(app.getPath('userData'), 'connection.json'),
+    },
+  };
+}
 function menu() {
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
@@ -148,13 +158,8 @@ function menu() {
         {
           label: 'Copy Read-only MCP Configuration',
           click: () => {
-            const args = app.isPackaged ? ['--mcp'] : [app.getAppPath(), '--mcp'];
             clipboard.writeText(
-              JSON.stringify(
-                { mcpServers: { atlas: { command: process.execPath, args } } },
-                null,
-                2,
-              ),
+              JSON.stringify({ mcpServers: { atlas: agentConfiguration() } }, null, 2),
             );
             void dialog.showMessageBox(window!, {
               type: 'info',
@@ -264,18 +269,12 @@ app
       console.log('DESKTOP_SMOKE_OK');
       const client = new Client({ name: 'packaged-smoke', version: '1.0.0' });
       const transport = new StdioClientTransport({
-        command: process.execPath,
-        args: [
-          ...(process.platform === 'linux'
-            ? ['--no-sandbox', '--ozone-platform=headless', '--disable-gpu']
-            : []),
-          ...(app.isPackaged ? ['--mcp'] : [app.getAppPath(), '--mcp']),
-        ],
+        ...agentConfiguration(),
         env: {
           ...Object.fromEntries(
             Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined),
           ),
-          ATLAS_USER_DATA: app.getPath('userData'),
+          ...agentConfiguration().env,
         },
         stderr: 'inherit',
       });
