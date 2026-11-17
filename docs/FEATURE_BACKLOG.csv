@@ -1,0 +1,116 @@
+id,area,feature,release,milestone,depends_on,acceptance_criteria,reference,status
+F001,Foundation,Unified item and revision contracts,R1,M0,,Assets notes bookmarks and records use stable IDs and expected revisions,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F002,Foundation,Windows and macOS shell experiment,R1,M0,F001,Real local image and video preview plus keyboard selection runs on both platforms,P06,Planned
+F003,Android,Share and process-death experiment,R1,M0,F001,Shared image text and video survive restart and URI access expiry,P01;P03,Planned
+F004,Sync,Conflict semantics experiment,R1,M0,F001,Two offline replicas preserve conflicting notes sets and delete-edit alternatives,Proposed,Planned
+F005,Migration,Eagle walkthrough and fixture mapping,R1,M0,,Installed version and mapped or unmapped fields are recorded against a sample library,E11;E16;E17,Planned
+F006,Notes,External Markdown reconciliation experiment,R1,M0,F001,External edits and renames are recovered without overwriting divergent text,O01,Planned
+F007,Agents,MCP read and reversible-write experiment,R1,M0,F001,Actual client reads allowed scope and unauthorized write fails,A01;A02,Prototype partial - see IMPLEMENTATION_STATUS.md
+F008,Foundation,Foundation and platform decision record,R1,M0,F002;F003;F004;F006;F007;F115,Choose fork or composition using measured gates licenses adaptation cost and revised architecture and estimates,P06;OPEN_SOURCE_OPTIONS.md,Prototype partial - see IMPLEMENTATION_STATUS.md
+F009,Storage,Library create open switch and schema version,R1,M1,F008,Missing drive and incompatible schema produce actionable states without modification,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F010,Storage,Atomic managed import and content hashes,R1,M1,F009,Interrupted copy recovers and exported originals have identical hashes,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F011,Storage,Durable operations and outbox,R1,M1,F010;F004,Acknowledged edits survive termination and retry has one logical effect,Proposed,Planned
+F012,Import,File folder and clipboard ingestion,R1,M1,F010,Mixed files import with original names source context and partial-failure report,E01;E17,Prototype partial - see IMPLEMENTATION_STATUS.md
+F013,Import,Desktop watched-folder import,R1,M1,F012;F011,Settled file copies import once and source files remain intact,E17,Planned
+F014,Import,Exact duplicate detection,R1,M1,F010,Reuse or separate logical item shares bytes without losing source information,E03,Prototype partial - see IMPLEMENTATION_STATUS.md
+F015,Organization,Nested collections and multiple membership,R1,M1,F011,Removing one membership does not delete another membership or original,E02;E12,Prototype partial - see IMPLEMENTATION_STATUS.md
+F016,Organization,Tags groups recent and favorite tags,R1,M1,F011,Tags and groups persist and queries return correct memberships,E13;E14;E20,Prototype partial - see IMPLEMENTATION_STATUS.md
+F017,Organization,Tag rename merge and undo,R1,M1,F016,Affected references update and a reversible history entry is recorded,E13,Planned
+F018,Organization,Metadata editing and ratings,R1,M1,F011,Editable title source description and ratings retain revisions,E11,Prototype partial - see IMPLEMENTATION_STATUS.md
+F019,Organization,Bulk edits with mixed-value states,R1,M1,F015;F016;F018,Add remove and replace behave distinctly and batch undo restores state,E02,Planned
+F020,Automation,Deterministic collection/type/source tagging rules,R1,M1,F016;F011,Rule execution is idempotent and distinguishable from AI suggestions,E01,Planned
+F021,Media,Persistent preview and extraction jobs,R1,M1,F010;F011,Corrupt inputs fail independently with retry and bounded resource use,Proposed,Planned
+F022,Media,Common images and GIF viewer,R1,M1,F021,JPEG PNG WebP GIF render and animation pause works on certified devices,E01,Prototype partial - see IMPLEMENTATION_STATUS.md
+F023,Media,Sanitized SVG preview,R1,M1,F021,SVG renders without embedded script execution or unexpected network access,Proposed,Planned
+F024,Media,Baseline video playback and posters,R1,M1,F021,H.264 AAC MP4 plays on all targets and unsupported codecs show explicit status,E03,Prototype partial - see IMPLEMENTATION_STATUS.md
+F025,Media,Baseline audio playback,R1,M1,F021,Certified MP3 WAV and M4A fixtures play and seek without loading all bytes,E01,Prototype partial - see IMPLEMENTATION_STATUS.md
+F026,Media,PDF render and extractable text,R1,M1,F021,Pages render and searchable text anchors refer to correct pages,Proposed,Planned
+F027,Media,Color palette and common EXIF fields,R1,M1,F021,Palette and metadata derive from source with unsupported fields clearly absent,E02;E03,Planned
+F028,Media,Generic file fallback and external opening,R1,M1,F010,Unknown types remain organizable and export without modification,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F029,UI,Dark desktop shell and inspector,R1,M1,F002;F015;F018,Resizable panes empty/error states and visible keyboard focus work,E02;E03,Prototype partial - see IMPLEMENTATION_STATUS.md
+F030,UI,Virtualized gallery list and selection,R1,M1,F029;F021,Range and multi-selection remain correct across scrolling and filtering,E02,Prototype partial - see IMPLEMENTATION_STATUS.md
+F031,UI,Command palette keyboard and quick preview,R1,M1,F030,Core actions have accessible controls and platform-appropriate shortcuts,E01;E03,Planned
+F032,Recovery,Trash restore and item revisions,R1,M1,F011,Restore creates recoverable current state without removing later history,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F033,Search,Lexical search and structured filters,R1,M1,F018;F016;F015,Queries match expected titles tags types and fields with pagination,P07,Prototype partial - see IMPLEMENTATION_STATUS.md
+F034,Search,Saved views and smart collections,R1,M2,F033,Filter AST sort and layout survive restart and produce consistent results,E15,Planned
+F035,Notes,Markdown editor preview and autosave,R1,M2,F006;F011,Saved note bytes survive restart and export as ordinary Markdown,O01,Prototype partial - see IMPLEMENTATION_STATUS.md
+F036,Notes,Frontmatter typed properties and unknown keys,R1,M2,F035,Unknown keys persist and invalid YAML never destroys note body,O04,Planned
+F037,Notes,Wiki and Markdown link resolution,R1,M2,F035;F001,Duplicate names unresolved links and rename updates behave predictably,O02,Planned
+F038,Notes,Embeds page links and video time links,R1,M2,F037;F024;F026,References open the intended item page or time with missing-content fallback,O02,Planned
+F039,Notes,External editor reconciliation,R1,M2,F006;F035;F036,UI and external edits with a common base merge or preserve alternatives,O01,Planned
+F040,Notes,Templates outline and find in note,R1,M2,F035,Template creates an editable note and heading navigation tracks edits,Proposed,Planned
+F041,Relations,Typed relation commands and provenance,R1,M2,F001;F011,Asset note and record edges retain stable targets and origin,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F042,Relations,Backlinks and derived note links,R1,M2,F037;F041,Removing a parsed link does not remove an independent explicit relation,O02,Planned
+F043,Graph,Local graph and accessible relation list,R1,M2,F041;F042,Bounded one/two-hop view opens correct nodes and has nonvisual equivalent,O03,Prototype partial - see IMPLEMENTATION_STATUS.md
+F044,Graph,Filtered bounded global graph,R1,M2,F043;F033,Large graph truncation and grouping are explicit without UI freeze,O03,Prototype partial - see IMPLEMENTATION_STATUS.md
+F045,Tables,Property schemas and independent records,R1,M2,F001;F011,Typed values validate and fileless records remain linkable items,O04;O05,Planned
+F046,Tables,Editable table view and record forms,R1,M2,F045;F034,Columns filters sort bulk edits and validation survive restart,O05,Prototype partial - see IMPLEMENTATION_STATUS.md
+F047,Tables,CSV JSON import mapping and export,R1,M2,F045;F010,Nulls dates booleans and relations round trip through lossless JSON,Proposed,Planned
+F048,Portability,Portable notes assets metadata and relation export,R1,M2,F037;F041;F047,Export manifest resolves references and original hashes match,E17;O01,Prototype partial - see IMPLEMENTATION_STATUS.md
+F049,Sync,Authenticated single-owner hub and pairing,R1,M3,F004;F011,Only paired nonrevoked devices access the library,Proposed,Planned
+F050,Sync,Metadata operation feed and device cursors,R1,M3,F049,Reordered/repeated delivery converges without relying on wall clocks,Proposed,Planned
+F051,Sync,Resumable verified media transfers,R1,M3,F050;F010,Interrupted multi-GB upload resumes and active revision has verified bytes,Proposed,Planned
+F052,Sync,Conflict queue and resolution UI,R1,M3,F050;F039,Notes scalar fields media and delete-edit conflicts preserve alternatives,Proposed,Planned
+F053,Sync,Selective sync and offline pinning,R1,M3,F051,Metadata visible without originals and pinned content remains offline,Proposed,Planned
+F054,History,Change sets named checkpoints and restore,R1,M3,F032;F050,Restore is a new revision and checkpoint reports blob availability,Proposed,Planned
+F055,Recovery,Consistent backup and clean-device restore,R1,M3,F054;F048,Originals relations schemas pending edits and outbox survive restoration,Proposed,Planned
+F056,Recovery,Retention tombstones and garbage collection,R1,M3,F055;F050,Retained versions are not collected and stale devices cannot resurrect deletes,Proposed,Planned
+F057,Android,Offline library navigation and local search,R1,M3,F003;F033;F053,Cached items load without network and unsupported originals are explicit,P02,Planned
+F058,Android,Share sheet durable capture and imports,R1,M3,F003;F012;F051,Accepted shared bytes survive app death and sync without duplicates,P01;P03,Planned
+F059,Android,Touch media preview tags and collections,R1,M3,F057;F022;F024;F019,Core organization works without hover and with touch-size controls,Proposed,Planned
+F060,Android,Offline notes table forms and local graph,R1,M3,F057;F035;F046;F043,Changes persist offline and resolve correctly after reconnect,Proposed,Planned
+F061,Android,Native background transfer scheduler,R1,M3,F051;F058,Wi-Fi constraints retry and process death preserve queued work,P02,Planned
+F062,Android,Storage budget and cache controls,R1,M3,F053;F061,Eviction preserves pinned originals unsent captures and custom thumbnails,Proposed,Planned
+F063,Chrome,MV3 native bridge and persistent capture queue,R1,M3,F011,Worker termination or desktop outage leaves captures retryable,P04;P05,Planned
+F064,Chrome,Image link text and bookmark capture,R1,M3,F063;F012,Source URL title excerpt and selected collection arrive intact,E10,Planned
+F065,Chrome,Batch image selection filters and deduplication,R1,M3,F064;F014,Selected candidates import once with truthful success/failure counts,E10,Planned
+F066,Chrome,Visible area and region screenshot capture,R1,M3,F063,Captured region matches selection and is linked to source page,E10,Planned
+F067,AI,Built-in provider setup capabilities and secret storage,R1,M4,F011,Local and opted-in remote provider tests expose supported tasks only,E07;A03;A04,Planned
+F068,AI,Durable jobs proposals stale-result detection and undo,R1,M4,F067;F054,Retry is idempotent and changed inputs prevent silent application,Proposed,Planned
+F069,AI,Image descriptions and suggested filenames,R1,M4,F068;F022,Human text is preserved and model provenance accompanies proposals,E05,Planned
+F070,AI,Controlled-vocabulary tagging and categorization,R1,M4,F068;F016;F015,Suggestions follow selected vocabulary and existing collection constraints,E05,Planned
+F071,AI,OCR and extracted-text indexing,R1,M4,F068;F026;F033,Extracted content remains separate from user notes and links to source,Proposed,Planned
+F072,AI,Semantic text index and retrieval,R1,M4,F067;F033;F035,Embedding version stored and metadata-semantic matches are labeled,E06;E08,Planned
+F073,AI,Local image similarity retrieval,R1,M4,F067;F022,Similar-image results use compatible vectors and do not imply duplicates,E06;E08,Planned
+F074,AI,Scoped on-import automatic organization,R1,M4,F070;F020,User-enabled scope applies reversible changes and preserves corrections,E05,Planned
+F075,AI,Tag cleanup and relationship proposals,R1,M4,F068;F017;F041,Suggested merges/edges show impact and do not apply without configured authority,E09,Planned
+F076,AI,Source-grounded note summaries,R1,M4,F068;F038,Each summary links source items and generated text is distinguishable,Proposed,Planned
+F077,Agents,Scoped identities permissions and audit,R1,M4,F007;F011;F054,Expired or out-of-scope access fails consistently across interfaces,A02,Prototype partial - see IMPLEMENTATION_STATUS.md
+F078,Agents,Built-in MCP query and mutation tools,R1,M4,F077;F068,Two actual clients complete read and scoped reversible write workflows,A01;A02,Prototype partial - see IMPLEMENTATION_STATUS.md
+F079,Agents,HTTP API CLI and machine-readable schemas,R1,M4,F077;F078,UI-equivalent changes use expected revisions and idempotency keys,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F080,Agents,Headless desktop service lifecycle,R1,M4,F079,Agent access works with window closed when service enabled and stops when disabled,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F081,Migration,One-way Eagle importer and migration report,R1,M5,F005;F048;F032,Mapped fields preserve IDs and counts; retry does not duplicate imported items,E11;E16;E17,Planned
+F082,Release,Signed Windows macOS and Android packages,R1,M5,F080;F060,Clean installation upgrade and rollback/recovery documented per platform,Proposed,Planned
+F083,Release,Accessibility and interaction verification,R1,M5,F031;F059;F060,Keyboard and Android screen-reader acceptance scenarios pass,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F084,Release,Performance and memory benchmark suite,R1,M5,F030;F057;F072,Hardware dataset cold/warm results and peak memory recorded,Proposed,Planned
+F085,Release,Cross-device integrity and recovery acceptance,R1,M5,F052;F055;F061;F078,Offline crashes retries conflicts and restore scenarios pass on targets,Proposed,Planned
+F086,Release,Documentation setup migration and export guides,R1,M5,F081;F082;F085,New user completes local setup pairing model configuration and recovery,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
+F087,UI,Justified waterfall comparison and presentation views,R2,Post-R1,F030;F031,Layouts preserve item identity selection and scroll position,E02,Planned
+F088,Media,Similar-image review and merge workflow,R2,Post-R1,F014;F073,User can keep both and merged metadata retains source/history,E03,Planned
+F089,Media,Custom covers pin windows and richer inspectors,R2,Post-R1,F029;F021,Custom imagery persists independently of regenerable caches,E03,Planned
+F090,Media,Conversions compression crop and derivatives,R2,Post-R1,F021;F032,Original hash unchanged and derivative relation is recorded,E04,Planned
+F091,Media,Broader codecs proxies and video tools,R2,Post-R1,F024;F051,Certified codec matrix and cancelable derivative jobs are published,E03,Planned
+F092,Media,Font specimens and desktop activation,R2,Post-R1,F028,Specimens render without mandatory installation and activation is reversible,E01,Planned
+F093,Media,HEIC RAW TIFF PSD AI EPS design previews,R2,Post-R1,F028;F021,Each claimed format has a tested per-platform capability and fallback,E03,Planned
+F094,Media,3D EPUB and Office preview adapters,R2,Post-R1,F028;F021,Malformed files isolated and external dependencies are handled explicitly,E03,Planned
+F095,Notes,Daily notes block links math and live preview,R2,Post-R1,F035;F037,Authoring/export preserves content and documented syntax,O01;O02,Planned
+F096,Notes,PDF highlights transcripts and deeper anchors,R2,Post-R1,F038;F071,Anchors remain attached to the intended source version,Proposed,Planned
+F097,Tables,Grouping formulas rollups boards and calendar,R2,Post-R1,F046;F041,Formula cycles errors and type migrations are handled without code execution,O05,Planned
+F098,Graph,Saved graph layouts clustering and canvas,R2,Post-R1,F044,Large datasets remain bounded and positions export with view metadata,O03,Planned
+F099,AI,Cross-modal text-to-image retrieval,R2,Post-R1,F073;F072,Image-content retrieval measured separately from metadata matching,Proposed,Planned
+F100,AI,Background removal upscale and erasing,R2,Post-R1,F090;F068,Outputs are explicit derivatives with model provenance and originals retained,E03,Planned
+F101,Chrome,Element full-page and higher-resolution capture,R2,Post-R1,F066;F065,Sticky elements dynamic pages and source selection have tested fallbacks,E10,Planned
+F102,Browsers,Edge and Firefox packaging,R2,Post-R1,F063,Each browser passes capture queue and native-bridge installation tests,E10,Planned
+F103,Sharing,Read-only revocable gallery links,R2,Post-R1,F049;F053,Only explicitly published item set visible and revocation ends access,Proposed,Planned
+F104,Migration,Eaglepack and expanded Obsidian import,R2,Post-R1,F081;F039,Unsupported constructs reported with original payload preserved,E17;O01,Planned
+F105,Portability,Optional Git metadata and note export,R2,Post-R1,F048,Export is readable and excludes secrets caches and unconfigured large binaries,P08,Planned
+F106,Organization,Cross-library search merge and referenced files,R2,Post-R1,F009;F033;F048,Missing paths and duplicate identities are recoverable and explicit,Proposed,Planned
+F107,Collaboration,Multi-user editing permissions and review,Later,Separate-scope,F085;F077,Requires a separate team conflict authorization and administration specification,E18,Planned
+F108,Extensibility,Third-party plugins and marketplace,Later,Separate-scope,F079,Requires sandbox versioning permissions and review design; not Eagle binary compatibility,E04,Planned
+F109,Platforms,iOS Safari and desktop Linux certification,Later,Separate-scope,F082;F102,Independent platform gates and distribution requirements defined,Proposed,Planned
+F110,Privacy,End-to-end encryption and key recovery,Later,Separate-scope,F049;F055,Required before any zero-knowledge claim and reconciled with AI/preview processing,Proposed,Planned
+F111,Formats,SWF archival execution and full creative-file editing,Later,Separate-scope,F094,Individually scoped renderers or editors with isolation and license review,E03,Planned
+F112,Hosting,Managed cloud hosting and subscriptions,Later,Separate-scope,F085;F103,Operational cost backups access isolation and privacy requirements established,Proposed,Planned
+F113,Foundation,Open-source source and license screening,R1,M0,,Pinned revisions and core Pro service boundaries documented with reproducible target-platform build paths,OPEN_SOURCE_OPTIONS.md,Prototype partial - see IMPLEMENTATION_STATUS.md
+F114,Foundation,Candidate build and fixture comparison,R1,M0,F113,At most two routes evaluated with common assets notes Android lifecycle sync and agent fixtures; untested platforms explicitly recorded,OPEN_SOURCE_OPTIONS.md,Prototype partial - see IMPLEMENTATION_STATUS.md
+F115,Foundation,Reuse and maintenance cost decision,R1,M0,F114;F002;F003;F004;F006;F007,Hard platform integrity and license gates pass before weighted comparison; adaptation and upstream maintenance estimates recorded,OPEN_SOURCE_OPTIONS.md,Planned
