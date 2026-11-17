@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { request } from 'node:http';
@@ -241,7 +242,7 @@ test('MCP protocol client can search/read and write tools are opt-in with revisi
         command: process.execPath,
         args: [
           '--import',
-          join(process.cwd(), 'node_modules/tsx/dist/loader.mjs'),
+          pathToFileURL(join(process.cwd(), 'node_modules/tsx/dist/loader.mjs')).href,
           join(process.cwd(), 'server/mcp.ts'),
         ],
         cwd: tmpdir(),

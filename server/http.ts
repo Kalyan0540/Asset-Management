@@ -186,7 +186,7 @@ export function createLibraryServer(options: {
               }),
               createWriteStream(temp, { flags: 'wx', mode: 0o600 }),
             );
-            const fd = openSync(temp, 'r');
+            const fd = openSync(temp, 'r+');
             try {
               fsyncSync(fd);
             } finally {
