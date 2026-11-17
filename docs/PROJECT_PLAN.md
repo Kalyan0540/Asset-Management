@@ -4,6 +4,8 @@ Version 0.2 · 17 November 2026 · Planning baseline, not an implementation clai
 
 Implementation update: a local reference prototype now exists. See [implementation status](IMPLEMENTATION_STATUS.md) and [ADR 001](ADR-001-REFERENCE-PROTOTYPE.md). The requirements below remain the target plan; the presence of prototype code does not imply R1 or M0 platform gates are complete.
 
+Desktop delivery update: Atlas 0.2 packages that implementation with Electron and adds backups, bulk organization, previews and reviewed local AI suggestions. [ADR 002](ADR-002-DESKTOP-DELIVERY.md) supersedes the draft Tauri choice for this early desktop release. Native Android, synchronization and the full R1 acceptance suite remain pending.
+
 ## 1. Product decision
 
 Build an independent, local-first application combining an Eagle-like asset library with Markdown notes, structured records, relationships, and built-in AI. Every item can be searched, tagged, linked, viewed in a collection, and accessed by authorized local agents.

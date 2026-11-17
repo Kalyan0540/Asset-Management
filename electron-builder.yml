@@ -1,0 +1,30 @@
+appId: cool.atlas.library
+productName: Atlas
+icon: build/icon.png
+artifactName: Atlas-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+files:
+  - desktop-build/**
+  - dist/**
+  - package.json
+  - '!node_modules/**'
+asar: true
+npmRebuild: false
+mac:
+  category: public.app-category.productivity
+  target: [dmg, zip]
+  identity: '-'
+  hardenedRuntime: false
+dmg:
+  sign: false
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  deleteAppDataOnUninstall: false
+linux:
+  target: [AppImage]
+  category: Graphics

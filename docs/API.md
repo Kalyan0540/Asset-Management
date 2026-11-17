@@ -10,6 +10,12 @@ The service listens on `127.0.0.1:3210` by default. All `/api` endpoints except 
 | `POST /api/collections` | JSON `{ "name": "References" }`; exact-name duplicates return the existing collection. |
 | `POST /api/import?name=photo.png` | Raw bytes with `Content-Type: application/octet-stream`. Default limit: 2 GiB per file. Returns a new asset with a content hash. Each import creates a logical record; identical bytes share one blob. |
 | `PATCH /api/items/:id` | JSON with mandatory `expectedRevision` and only allowed changed fields: title, description, tags, collections, relations, body, favorite, trashed. `body` is valid only for notes. |
+| `POST /api/batch` | Array of `{ "id": "uuid", "patch": { "expectedRevision": 1, "tags": ["reference"] } }`; up to 500 distinct items. Every mutation commits together or none do. |
+| `GET /api/ai/models` | Reports locally installed Ollama models at loopback port 11434. |
+| `GET /api/ai/jobs` | Recent persisted AI proposal records and states. |
+| `POST /api/ai/jobs` | `{ "itemId": "uuid", "model": "installed-model-name" }`; creates a suggestion without changing the item. |
+| `POST /api/ai/jobs/:id/apply` | `{ "includeDescription": false }`; applies reviewed tags and optional description only if the source revision is still current. |
+| `POST /api/ai/jobs/:id/cancel` | Cancels a running suggestion. |
 | `GET /api/items/:id/history` | Revision/action/actor/time list. |
 | `POST /api/items/:id/restore` | JSON `{ "revision": 1, "expectedRevision": 3 }`; restores editable fields from revision 1 as revision 4. |
 | `GET /api/items/:id/content` | Current note text or original asset bytes. File delivery supports a single HTTP byte range. Unknown/active types use attachment disposition. |

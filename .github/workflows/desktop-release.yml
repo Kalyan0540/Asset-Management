@@ -1,0 +1,72 @@
+name: Build desktop downloads
+on:
+  push:
+    branches: [feat/library-foundation]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: mac
+            arch: arm64
+          - os: macos-15-intel
+            platform: mac
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build:desktop
+      - name: Test desktop runtime
+        run: npm run desktop:smoke
+        env:
+          ATLAS_USER_DATA: ${{ runner.temp }}/atlas-smoke
+      - name: Package application
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Test packaged application
+        run: node scripts/smoke-packaged.mjs
+        env:
+          ATLAS_USER_DATA: ${{ runner.temp }}/atlas-packaged-smoke
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Atlas-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloads
+          merge-multiple: true
+      - name: Publish early-access downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd downloads
+          sha256sum * > SHA256SUMS.txt
+          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "Atlas ${{ github.ref_name }} — early desktop release" --prerelease --notes-file ../docs/RELEASE_NOTES.md *

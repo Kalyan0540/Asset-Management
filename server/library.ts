@@ -136,36 +136,51 @@ export class Library {
     );
   }
   patch(id: string, input: ItemPatch, actor = 'ui') {
+    return this.transaction(() => this.update(id, input, actor));
+  }
+  private update(id: string, input: ItemPatch, actor: string) {
     const { expectedRevision, ...changes } = patchSchema.parse(input);
-    return this.transaction(() => {
-      const current = this.get(id);
-      if (current.revision !== expectedRevision)
-        throw new LibraryError(
-          409,
-          'This item changed elsewhere. Reload it before saving; your draft has been kept.',
-        );
-      if (changes.body !== undefined && current.kind !== 'note')
-        throw new LibraryError(400, 'Only notes have editable bodies');
-      for (const collection of changes.collections ?? []) {
-        if (!this.db.prepare('SELECT id FROM collections WHERE id=?').get(collection))
-          throw new LibraryError(400, 'Unknown collection');
-      }
-      for (const relation of changes.relations ?? []) {
-        if (relation.target === id) throw new LibraryError(400, 'An item cannot relate to itself');
-        this.get(relation.target);
-      }
-      const next = {
-        ...current,
-        ...changes,
-        revision: current.revision + 1,
-        updatedAt: new Date().toISOString(),
-      };
-      if (next.kind === 'note') next.size = Buffer.byteLength(next.body);
-      return this.save(
-        next,
-        changes.trashed === true ? 'trash' : changes.trashed === false ? 'restore' : 'edit',
-        actor,
+    const current = this.get(id);
+    if (current.revision !== expectedRevision)
+      throw new LibraryError(
+        409,
+        'This item changed elsewhere. Reload it before saving; your draft has been kept.',
       );
+    if (changes.body !== undefined && current.kind !== 'note')
+      throw new LibraryError(400, 'Only notes have editable bodies');
+    for (const collection of changes.collections ?? []) {
+      if (!this.db.prepare('SELECT id FROM collections WHERE id=?').get(collection))
+        throw new LibraryError(400, 'Unknown collection');
+    }
+    for (const relation of changes.relations ?? []) {
+      if (relation.target === id) throw new LibraryError(400, 'An item cannot relate to itself');
+      this.get(relation.target);
+    }
+    const next = {
+      ...current,
+      ...changes,
+      revision: current.revision + 1,
+      updatedAt: new Date().toISOString(),
+    };
+    if (next.kind === 'note') next.size = Buffer.byteLength(next.body);
+    return this.save(
+      next,
+      changes.trashed === true ? 'trash' : changes.trashed === false ? 'restore' : 'edit',
+      actor,
+    );
+  }
+  batch(changes: { id: string; patch: ItemPatch }[], actor = 'ui') {
+    if (new Set(changes.map((c) => c.id)).size !== changes.length)
+      throw new LibraryError(400, 'An item can only appear once in a batch.');
+    return this.transaction(() =>
+      changes.map((change) => this.update(change.id, change.patch, actor)),
+    );
+  }
+  applyAi(id: string, item: Item, patch: ItemPatch, job: unknown) {
+    return this.transaction(() => {
+      const updated = this.update(item.id, patch, 'ai-reviewed');
+      this.db.prepare('UPDATE ai_jobs SET data=? WHERE id=?').run(JSON.stringify(job), id);
+      return updated;
     });
   }
   history(id: string): HistoryEntry[] {

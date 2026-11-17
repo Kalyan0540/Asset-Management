@@ -18,6 +18,8 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { z, ZodError } from 'zod';
 import { Library, LibraryError } from './library.ts';
+import { patchSchema } from '../shared/model.ts';
+import { LocalAI } from './ai.ts';
 
 const MAX_JSON = 2_000_000;
 const previewTypes: Record<string, string> = {
@@ -62,8 +64,10 @@ export function createLibraryServer(options: {
   dist?: string;
   maxUploadBytes?: number;
   token?: string;
+  aiEndpoint?: string;
 }) {
   const library = new Library(resolve(options.root));
+  const ai = new LocalAI(library, options.aiEndpoint);
   const tokenPath = join(library.root, 'agent-token');
   const token =
     options.token ??
@@ -105,6 +109,26 @@ export function createLibraryServer(options: {
         if (a.length !== b.length || !timingSafeEqual(a, b))
           throw new LibraryError(401, 'Authentication required');
         const actor = req.headers.authorization ? 'agent' : 'ui';
+        if (url.pathname === '/api/ai/models' && req.method === 'GET')
+          return json(res, 200, await ai.models());
+        if (url.pathname === '/api/ai/jobs' && req.method === 'GET')
+          return json(res, 200, ai.list());
+        if (url.pathname === '/api/ai/jobs' && req.method === 'POST') {
+          const input = z
+            .object({ itemId: z.string().uuid(), model: z.string().min(1).max(200) })
+            .strict()
+            .parse(await body(req));
+          return json(res, 202, ai.start(input.itemId, input.model));
+        }
+        const aiAction = url.pathname.match(/^\/api\/ai\/jobs\/([\w-]+)\/(apply|cancel)$/);
+        if (aiAction && req.method === 'POST') {
+          if (aiAction[2] === 'cancel') return json(res, 200, ai.cancel(aiAction[1]));
+          const input = z
+            .object({ includeDescription: z.boolean().default(false) })
+            .strict()
+            .parse(await body(req));
+          return json(res, 200, ai.apply(aiAction[1], input.includeDescription));
+        }
         if (url.pathname === '/api/library' && req.method === 'GET')
           return json(res, 200, { items: library.list(), collections: library.collections() });
         if (url.pathname === '/api/manifest' && req.method === 'GET') {
@@ -125,6 +149,14 @@ export function createLibraryServer(options: {
         }
         if (url.pathname === '/api/notes' && req.method === 'POST')
           return json(res, 201, library.createNote(await body(req), actor));
+        if (url.pathname === '/api/batch' && req.method === 'POST') {
+          const changes = z
+            .array(z.object({ id: z.string().uuid(), patch: patchSchema }).strict())
+            .min(1)
+            .max(500)
+            .parse(await body(req));
+          return json(res, 200, library.batch(changes, actor));
+        }
         if (url.pathname === '/api/import' && req.method === 'POST') {
           if (req.headers['content-type'] !== 'application/octet-stream')
             throw new LibraryError(415, 'Expected a binary file upload');
@@ -310,7 +342,10 @@ export function createLibraryServer(options: {
       if (status === 500) console.error(error);
     }
   });
-  server.on('close', () => library.close());
+  server.on('close', () => {
+    ai.stop();
+    library.close();
+  });
   return {
     server,
     library,

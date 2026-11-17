@@ -1,10 +1,16 @@
 # Atlas — personal asset and knowledge library
 
-A local-first asset library inspired by Eagle, with Markdown notes, collections, tags, typed relations and agent access. The working interface uses a minimal dark theme. **This is an early local prototype, not the complete planned product.**
+A local-first asset library inspired by Eagle, with Markdown notes, collections, tags, typed relations and agent access. The working interface uses a minimal dark theme. **This is an early desktop release, not the complete planned product.**
 
-The first implementation includes real file import/export, persistent SQLite metadata, notes, gallery/table/graph views, revision history, recoverable trash and a read-only-by-default MCP adapter. It runs as a loopback service with a browser interface. Windows/macOS packaging, native Android, sync, AI tagging and Chrome capture are planned; they have not been implemented or certified.
+Atlas 0.2 adds a desktop app for macOS and Windows, verified library backups, bulk organization, large previews and reviewed local AI suggestions. The browser development interface remains available. Native Android, automatic device sync, Chrome capture, Eagle migration and advanced knowledge-management features are still in development.
 
-## Run locally
+## Download the desktop app
+
+For normal use, open [Downloads](https://github.com/Kalyan0540/Asset-Management/releases) and follow the [simple installation guide](docs/GETTING_STARTED.md). Choose the DMG for your Mac chip or the Windows installer; do not download the source ZIP. No programming tools are needed for an installer. Early releases are not publisher-signed or Apple-notarized.
+
+The native **Library** menu creates/opens libraries, shows their location, makes verified backups and restores a backup into a separate library. Your data stays outside the installed application, so replacing the app does not replace the library.
+
+## Run from source (developers)
 
 Requires **Node.js 24 or later** and npm. Clone the repository and select the implementation branch:
 
@@ -26,6 +32,8 @@ npm start
 ```
 
 Do not sync a live `.library` directory through Git, Dropbox or a shared drive. This prototype has no cross-device synchronization. Keep important originals backed up. The [status document](docs/IMPLEMENTATION_STATUS.md) explains backup limitations and every major unimplemented area.
+
+To build the desktop app from source, run `npm run desktop`. To package it for your current platform, run `npm run package:desktop`. Release automation builds and smoke-tests Apple-chip Mac, Intel Mac and Windows packages.
 
 ## Use with a local agent
 
@@ -61,6 +69,9 @@ npm run test:e2e
 If Chromium is already installed, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its executable instead of downloading a browser. Browser tests use a separate `.test-library/` directory, leaving your default library alone. GitHub Actions is configured to run build, integration and browser checks.
 
 ## Project documents
+
+- [Getting started](docs/GETTING_STARTED.md): simple download, install, first-use, backup and AI instructions.
+- [Release notes](docs/RELEASE_NOTES.md): what is included and still pending in 0.2.
 
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md): working capabilities, measured checks, limitations and next gates.
 - [Local API](docs/API.md): endpoints, storage layout, error semantics and agent boundaries.

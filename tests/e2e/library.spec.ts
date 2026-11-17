@@ -1,4 +1,28 @@
 import { test, expect } from '@playwright/test';
+test('bulk organization, sorting and full-screen preview work together', async ({ page }) => {
+  await page.goto('/');
+  const title = `Bulk preview ${Date.now()}`;
+  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await page.getByLabel('Note title').fill(title);
+  await page.getByRole('button', { name: 'Create note', exact: true }).click();
+  await page.getByLabel('Markdown content').fill('# A larger preview');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await page.getByLabel(`Select ${title}`, { exact: true }).check();
+  await page.getByLabel('Bulk tag').fill('batch-tag');
+  await page.getByRole('button', { name: 'Add tag', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('1 items updated');
+  await page.getByLabel('Sort items').selectOption('name');
+  await page.getByRole('button').filter({ hasText: title }).first().dblclick();
+  await expect(page.getByRole('dialog', { name: `Preview ${title}` })).toContainText(
+    '# A larger preview',
+  );
+  await page.getByRole('button', { name: 'Close preview' }).click();
+  await page.getByRole('button', { name: 'AI suggestions', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'AI suggestions' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close AI' }).click();
+});
 test('create, relate, edit, search, export, trash and restore real library items', async ({
   page,
 }) => {

@@ -31,6 +31,8 @@ import cytoscape from 'cytoscape';
 import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table';
 import type { Item, ItemPatch, Collection, LibrarySnapshot, HistoryEntry } from '../shared/model';
 import './styles.css';
+import { BulkBar, Lightbox } from './LibraryTools';
+import { AiPanel } from './AiPanel';
 
 async function api<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
   const response = await fetch('/api' + path, {
@@ -523,6 +525,31 @@ function App() {
     [name, setName] = useState(''),
     [menu, setMenu] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [showAI, setShowAI] = useState(false);
+  const [sort, setSort] = useState('newest'),
+    [tileSize, setTileSize] = useState(() => Number(localStorage.getItem('atlas.tileSize')) || 180),
+    [bulk, setBulk] = useState<string[]>([]),
+    [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    localStorage.setItem('atlas.tileSize', String(tileSize));
+  }, [tileSize]);
+  useEffect(() => {
+    const handle = (e: KeyboardEvent) => {
+      const input = (e.target as HTMLElement).closest(
+        'input,textarea,select,[contenteditable="true"]',
+      );
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('[aria-label="Search library"]')?.focus();
+      }
+      if (!input && e.code === 'Space' && selected && !document.querySelector('[role="dialog"]')) {
+        e.preventDefault();
+        setPreview(selected);
+      }
+    };
+    window.addEventListener('keydown', handle);
+    return () => window.removeEventListener('keydown', handle);
+  }, [selected]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -573,24 +600,34 @@ function App() {
     tags = [...new Set(active.flatMap((i) => i.tags))].sort();
   const filtered = useMemo(
     () =>
-      library.items.filter((i) => {
-        if (scope === 'trash' ? !i.trashed : i.trashed) return false;
-        if (scope === 'favorites' && !i.favorite) return false;
-        if (scope === 'notes' && i.kind !== 'note') return false;
-        if (scope === 'inbox' && i.collections.length) return false;
-        if (scope.startsWith('collection:') && !i.collections.includes(scope.slice(11)))
-          return false;
-        if (scope.startsWith('tag:') && !i.tags.includes(scope.slice(4))) return false;
-        if (
-          kind !== 'all' &&
-          (kind === 'note' ? i.kind !== 'note' : !i.mime.startsWith(kind + '/'))
-        )
-          return false;
-        return `${i.title} ${i.tags.join(' ')} ${i.description} ${i.body}`
-          .toLowerCase()
-          .includes(query.toLowerCase());
-      }),
-    [library, scope, kind, query],
+      library.items
+        .filter((i) => {
+          if (scope === 'trash' ? !i.trashed : i.trashed) return false;
+          if (scope === 'favorites' && !i.favorite) return false;
+          if (scope === 'notes' && i.kind !== 'note') return false;
+          if (scope === 'inbox' && i.collections.length) return false;
+          if (scope.startsWith('collection:') && !i.collections.includes(scope.slice(11)))
+            return false;
+          if (scope.startsWith('tag:') && !i.tags.includes(scope.slice(4))) return false;
+          if (
+            kind !== 'all' &&
+            (kind === 'note' ? i.kind !== 'note' : !i.mime.startsWith(kind + '/'))
+          )
+            return false;
+          return `${i.title} ${i.tags.join(' ')} ${i.description} ${i.body}`
+            .toLowerCase()
+            .includes(query.toLowerCase());
+        })
+        .sort((a, b) =>
+          sort === 'name'
+            ? a.title.localeCompare(b.title)
+            : sort === 'size'
+              ? b.size - a.size
+              : sort === 'oldest'
+                ? a.createdAt.localeCompare(b.createdAt)
+                : b.createdAt.localeCompare(a.createdAt),
+        ),
+    [library, scope, kind, query, sort],
   );
   const title =
     scope === 'all'
@@ -619,9 +656,22 @@ function App() {
     [dirty, selected],
   );
   const navigate = (value: string) => {
+    setBulk([]);
     setScope(value);
     setMenu(false);
   };
+  async function applyBulk(changes: { id: string; patch: ItemPatch }[]) {
+    if (dirty && !window.confirm('Discard your unsaved changes and apply this batch?')) return;
+    try {
+      setError('');
+      await api('/batch', 'POST', changes);
+      await reload();
+      setNotice(`${changes.length} items updated`);
+      setBulk([]);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   async function save(patch: ItemPatch) {
     try {
       setError('');
@@ -820,6 +870,18 @@ function App() {
             <span>{title}</span>
           </div>
           <div className="top-actions">
+            <button
+              className="secondary"
+              onClick={() => {
+                if (dirty) {
+                  setError('Save your changes before opening AI suggestions.');
+                  return;
+                }
+                setShowAI(true);
+              }}
+            >
+              AI suggestions
+            </button>
             <a className="icon-button" aria-label="Export metadata manifest" href="/api/manifest">
               <ArrowDownToLine size={17} />
             </a>
@@ -914,6 +976,49 @@ function App() {
             ))}
           </div>
         </div>
+        <div className="organize-toolbar">
+          <span>{filtered.length} items</span>
+          <label>
+            Sort{' '}
+            <select aria-label="Sort items" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name">Name A–Z</option>
+              <option value="size">Largest first</option>
+            </select>
+          </label>
+          <label className="size-control">
+            Thumbnail size
+            <input
+              aria-label="Thumbnail size"
+              type="range"
+              min="150"
+              max="280"
+              step="10"
+              value={tileSize}
+              onChange={(e) => setTileSize(Number(e.target.value))}
+            />
+          </label>
+          <button
+            className="text-button"
+            onClick={() => setBulk(filtered.slice(0, 500).map((i) => i.id))}
+          >
+            Select all{filtered.length > 500 ? ' (first 500)' : ''}
+          </button>
+          {item && (
+            <button className="text-button" onClick={() => setPreview(item.id)}>
+              Quick preview <kbd>Space</kbd>
+            </button>
+          )}
+        </div>
+        {bulk.length > 0 && (
+          <BulkBar
+            items={library.items.filter((i) => bulk.includes(i.id))}
+            collections={library.collections}
+            onApply={applyBulk}
+            onClear={() => setBulk([])}
+          />
+        )}
         {error && (
           <div className="alert" role="alert">
             <span>{error}</span>
@@ -953,40 +1058,65 @@ function App() {
               <small>or drag files anywhere into this workspace</small>
             </div>
           ) : view === 'grid' ? (
-            <div className="asset-grid">
+            <div
+              className="asset-grid"
+              style={{ '--tile-size': `${tileSize}px` } as React.CSSProperties}
+            >
               {filtered.map((i) => (
-                <button
+                <div
                   key={i.id}
-                  className={`asset-card ${selected === i.id ? 'selected' : ''}`}
-                  onClick={() => select(i.id)}
+                  className={`asset-card ${selected === i.id || bulk.includes(i.id) ? 'selected' : ''}`}
                 >
-                  <div className="thumbnail">
-                    <Thumbnail item={i} />
-                    {i.favorite && (
-                      <span className="favorite-indicator">
-                        <Star size={12} fill="currentColor" />
+                  <input
+                    className="card-checkbox"
+                    type="checkbox"
+                    aria-label={`Select ${i.title}`}
+                    checked={bulk.includes(i.id)}
+                    onChange={(e) =>
+                      setBulk((ids) =>
+                        e.target.checked ? [...ids, i.id] : ids.filter((id) => id !== i.id),
+                      )
+                    }
+                  />
+                  <button
+                    className="asset-open"
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey)
+                        setBulk((ids) =>
+                          ids.includes(i.id) ? ids.filter((id) => id !== i.id) : [...ids, i.id],
+                        );
+                      else select(i.id);
+                    }}
+                    onDoubleClick={() => setPreview(i.id)}
+                  >
+                    <div className="thumbnail">
+                      <Thumbnail item={i} />
+                      {i.favorite && (
+                        <span className="favorite-indicator">
+                          <Star size={12} fill="currentColor" />
+                        </span>
+                      )}
+                      <span className="format-badge">
+                        {i.kind === 'note'
+                          ? 'MD'
+                          : i.filename.split('.').at(-1)?.slice(0, 8).toUpperCase()}
                       </span>
-                    )}
-                    <span className="format-badge">
-                      {i.kind === 'note'
-                        ? 'MD'
-                        : i.filename.split('.').at(-1)?.slice(0, 8).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="card-caption">
-                    <strong>{i.title}</strong>
-                    <div>
-                      <span>
-                        {i.tags[0]
-                          ? `# ${i.tags[0]}`
-                          : i.kind === 'note'
-                            ? 'Markdown note'
-                            : 'Untagged'}
-                      </span>
-                      <small>{bytes(i.size)}</small>
                     </div>
-                  </div>
-                </button>
+                    <div className="card-caption">
+                      <strong>{i.title}</strong>
+                      <div>
+                        <span>
+                          {i.tags[0]
+                            ? `# ${i.tags[0]}`
+                            : i.kind === 'note'
+                              ? 'Markdown note'
+                              : 'Untagged'}
+                        </span>
+                        <small>{bytes(i.size)}</small>
+                      </div>
+                    </div>
+                  </button>
+                </div>
               ))}
             </div>
           ) : view === 'table' ? (
@@ -1000,10 +1130,31 @@ function App() {
             {filtered.length} items <span>·</span> {bytes(filtered.reduce((n, i) => n + i.size, 0))}
           </span>
           <span>
-            Personal library <span>·</span> Prototype 0.1
+            Personal library <span>·</span> Early release 0.2
           </span>
         </footer>
       </main>
+      {showAI && (
+        <div className="ai-shade" onClick={() => setShowAI(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <AiPanel item={item} onClose={() => setShowAI(false)} onApplied={reload} />
+          </div>
+        </div>
+      )}
+      {preview && library.items.find((i) => i.id === preview) && (
+        <Lightbox
+          item={library.items.find((i) => i.id === preview)!}
+          onClose={() => setPreview(null)}
+          onPrevious={() => {
+            const index = filtered.findIndex((i) => i.id === preview);
+            setPreview(filtered[(index - 1 + filtered.length) % filtered.length]?.id ?? null);
+          }}
+          onNext={() => {
+            const index = filtered.findIndex((i) => i.id === preview);
+            setPreview(filtered[(index + 1) % filtered.length]?.id ?? null);
+          }}
+        />
+      )}
       {item && (
         <Inspector
           key={`${item.id}-${item.revision}`}
