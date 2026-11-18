@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { ArrowLeft, Link2 } from 'lucide-react';
@@ -35,7 +35,7 @@ export function NoteEditor({
   onChange,
   onBack,
   onOpen,
-  busy,
+  saveStatus,
   rendered,
   setRendered,
 }: {
@@ -44,7 +44,7 @@ export function NoteEditor({
   onChange: (key: 'body' | 'title', value: string) => void;
   onBack: () => void;
   onOpen: (id: string) => void;
-  busy: boolean;
+  saveStatus: ReactNode;
   rendered: boolean;
   setRendered: (rendered: boolean) => void;
 }) {
@@ -93,7 +93,7 @@ export function NoteEditor({
   return (
     <section className="note-workspace" aria-label="Note editor">
       <div className="note-toolbar">
-        <button type="button" className="secondary" disabled={busy} onClick={onBack}>
+        <button type="button" className="secondary" onClick={onBack}>
           <ArrowLeft size={16} /> Library
         </button>
         <div className="note-modes">
@@ -118,9 +118,7 @@ export function NoteEditor({
             Read
           </button>
         </div>
-        <button type="submit" form="item-details-form" className="primary" disabled={busy}>
-          Save note
-        </button>
+        {saveStatus}
       </div>
       <div className="note-page">
         <input
@@ -128,7 +126,7 @@ export function NoteEditor({
           aria-label="Note title"
           value={item.title}
           maxLength={250}
-          disabled={busy}
+
           onChange={(e) => onChange('title', e.target.value)}
         />
         {rendered ? (
@@ -179,7 +177,7 @@ export function NoteEditor({
               <button
                 type="button"
                 className="text-button"
-                disabled={busy}
+
                 onClick={() =>
                   openPicker({
                     start: textarea.current?.selectionStart ?? item.body.length,
@@ -259,7 +257,7 @@ export function NoteEditor({
                 aria-label="Markdown content"
                 placeholder="Start writing…"
                 maxLength={1_000_000}
-                disabled={busy}
+
                 value={item.body}
                 onChange={(e) => {
                   const { value, selectionStart } = e.currentTarget;

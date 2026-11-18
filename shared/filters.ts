@@ -23,6 +23,20 @@ export type FilterRule = z.infer<typeof filterRuleSchema>;
 export type SmartFolder = z.infer<typeof smartFolderSchema> & { id: string };
 export type VisualInfo = { width?: number; height?: number; colors?: string[] };
 
+export function normalizeHex(value: string) {
+  const digits = value.trim().replace(/^#/, '').toLowerCase();
+  if (/^[a-f0-9]{6}$/.test(digits)) return `#${digits}`;
+  if (/^[a-f0-9]{3}$/.test(digits))
+    return '#' + Array.from(digits, (digit) => digit.repeat(2)).join('');
+  return undefined;
+}
+
+export function fileType(item: Item) {
+  if (item.kind === 'note') return 'md';
+  const extension = /\.([a-z0-9]{1,24})$/i.exec(item.filename)?.[1].toLowerCase();
+  return extension === 'jpeg' ? 'jpg' : (extension ?? 'file');
+}
+
 export function matchesRule(item: Item, rule: FilterRule, visual?: VisualInfo) {
   const raw = item.source?.metadata;
   const width = visual?.width ?? Number(raw?.width);
@@ -43,6 +57,7 @@ export function matchesRule(item: Item, rule: FilterRule, visual?: VisualInfo) {
         item.mime,
         item.mime.split('/')[0],
         item.filename.split('.').at(-1) ?? '',
+        fileType(item),
         item.kind === 'note' ? 'markdown' : '',
       ];
       break;
@@ -63,9 +78,9 @@ export function matchesRule(item: Item, rule: FilterRule, visual?: VisualInfo) {
       break;
     case 'color': {
       const palette = Array.isArray(raw?.palettes) ? raw.palettes : [];
-      values =
-        visual?.colors ??
-        palette.flatMap((entry) => {
+      values = [
+        ...(visual?.colors ?? []),
+        ...palette.flatMap((entry) => {
           const rgb = entry?.color;
           return Array.isArray(rgb) &&
             rgb.length >= 3 &&
@@ -78,20 +93,25 @@ export function matchesRule(item: Item, rule: FilterRule, visual?: VisualInfo) {
                     .join(''),
               ]
             : [];
-        });
+        }),
+      ];
       break;
     }
   }
-  if (rule.field === 'color' && /^#[a-f0-9]{6}$/i.test(rule.value)) {
+  if (rule.field === 'color') {
+    const hex = normalizeHex(rule.value);
+    if (!hex) return false;
     const rgb = (hex: string) =>
       [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
-    const target = rgb(rule.value);
-    const found = values.some(
-      (value) =>
-        /^#[a-f0-9]{6}$/i.test(value) &&
-        Math.hypot(...rgb(value).map((channel, n) => channel - target[n])) <=
-          (rule.tolerance ?? 0) * 4.42,
-    );
+    const target = rgb(hex);
+    const found = values.some((value) => {
+      const match = normalizeHex(value);
+      return (
+        !!match &&
+        Math.hypot(...rgb(match).map((channel, n) => channel - target[n])) <=
+          (rule.tolerance ?? 0) * 4.42
+      );
+    });
     return rule.operator === 'is not' ? !found : found;
   }
   const needle = rule.value.toLowerCase();

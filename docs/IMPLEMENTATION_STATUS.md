@@ -2,6 +2,13 @@
 
 18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
 
+## First workspace pass in development
+
+- Note and inspector edits autosave. Recoverable desktop drafts stay in the active library's staging area. Simultaneous edits to the same field require a choice before replacing a saved version.
+- Parent folders display subfolders first. Enable **Show subfolder contents** to include descendant items. Grid and List are the main gallery layouts. Search includes file-type checkboxes and accepts normalized color values.
+- The center image view keeps the side panels in place. The gallery supports directional focus, range and drag selection, context actions, and thumbnail size steps. Video posters are cached for formats the bundled browser can decode. The note magnifier shows rendered excerpts.
+- The graph supports full and local views, search, and connection highlighting. The [workspace research](WORKSPACE_RESEARCH.md) records the references and the next editor and organization improvements.
+
 ## New in 0.6
 
 - Merge two Atlas libraries into a verified new copy. The second library's nested folders sit under a named branch. Originals, item revisions, relations, Markdown links and embeds, Trash, tag groups and smart folder definitions are carried forward. Distinct entries share original bytes when their hashes match. The merge copies catalog data from both libraries and carries the current library's auxiliary data. Source-specific import reports and pending AI jobs remain in the source.

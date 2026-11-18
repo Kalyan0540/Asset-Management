@@ -1,15 +1,93 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+async function newNote(page: Page) {
+  await page.getByText('New', { exact: true }).click();
+  await page.getByRole('button', { name: 'New note', exact: true }).click();
+}
+const saved = (page: Page) => expect(page.locator('.draft-status')).toHaveText('Changes saved');
+
+test('the integrated type filter, center image canvas and panel shortcut work together', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const title = `Detail-${Date.now()}`;
+  const pixel = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await page.getByLabel('Import files', { exact: true }).setInputFiles([
+    { name: `${title}-A.png`, mimeType: 'image/png', buffer: pixel },
+    { name: `${title}-B.png`, mimeType: 'image/png', buffer: pixel },
+    { name: `${title}-C.txt`, mimeType: 'text/plain', buffer: Buffer.from('reference') },
+  ]);
+  await expect(page.getByLabel('Item title')).toHaveValue(`${title}-C.txt`);
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await expect(page.locator('.inspector')).toHaveCount(0);
+  await page.getByLabel('Search library').fill(title);
+  await page.getByLabel('Filter file types').click();
+  await page.getByRole('checkbox', { name: 'Include png' }).check();
+  await page.getByLabel('Find a file type').press('Escape');
+  const tiles = page.locator('.asset-open');
+  await expect(tiles).toHaveCount(2);
+  await tiles.first().focus();
+  await tiles.first().press('ArrowRight');
+  await expect(tiles.nth(1)).toBeFocused();
+  await tiles.nth(1).press('Enter');
+  const detail = page.getByRole('region', { name: 'Image detail' });
+  await expect(detail).toBeVisible();
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await expect(page.locator('.inspector')).toBeVisible();
+  const readout = detail.locator('output');
+  const before = parseInt((await readout.textContent())!);
+  await detail.getByRole('button', { name: 'Zoom in' }).click();
+  await expect.poll(async () => parseInt((await readout.textContent())!)).toBeGreaterThan(before);
+  await page.keyboard.press('Control+/');
+  await expect(page.locator('.sidebar')).toBeHidden();
+  await expect(page.locator('.inspector')).toBeHidden();
+  await page.keyboard.press('Control+/');
+  await expect(page.locator('.sidebar')).toBeVisible();
+  await detail.getByRole('button', { name: 'Back to gallery' }).click();
+  await expect(tiles.nth(1)).toBeFocused();
+});
+
+test('a video gets a reusable poster and Markdown peeks render headings', async ({ page }) => {
+  await page.goto('/');
+  const filename = `Poster-${Date.now()}.webm`;
+  // A synthetic 32 × 32 VP8 clip without audio.
+  const clip = Buffer.from(
+    'GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwH/////////EU2bdKtNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHLTbuMU6uEElTDZ1OsggEY7AEAAAAAAABoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmpSrXsYMPQkBNgIxMYXZmNjEuNy4xMDNXQYxMYXZmNjEuNy4xMDMWVK5ryK4BAAAAAAAAP9eBAXPFiHUaTQIn55bxnIEAIrWcg3VuZIiBAIaFVl9WUDiDgQEj44OEC+vCAOCQsIEguoEgmoECVbCEVbmBARJUw2fXc3OfY8CAZ8iZRaOHRU5DT0RFUkSHjExhdmY2MS43LjEwM3NzsmPAi2PFiHUaTQIn55bxZ8ihRaOHRU5DT0RFUkSHlExhdmM2MS4xOS4xMDEgbGlidnB4H0O2dUCI54EAo76BAACAEAMAnQEqIAAgAABHCIWFiIWEiAICAnWqA/gD+gIIWQy9AP79bvP/45k3MMT/jm3/8WE8DijI//FRAKOVgQDIALEBAAUQrAAYABhYL/QACHAAo5WBAZAAsQEABRCsABgAGFgv9AAIcACjlYECWACxAQAFEKwAGAAYWC/0AAhwAA==',
+    'base64',
+  );
+  await page
+    .getByLabel('Import files', { exact: true })
+    .setInputFiles({ name: filename, mimeType: 'video/webm', buffer: clip });
+  await expect(page.getByLabel('Item title')).toHaveValue(filename);
+  await page.getByRole('button', { name: 'Close details' }).click();
+  const tile = page.locator('.asset-card').filter({ hasText: filename });
+  await expect(tile.locator('.inline-video img')).toHaveJSProperty('naturalWidth', 32);
+  const id = await tile.getAttribute('data-item-id');
+  await expect
+    .poll(async () => (await page.request.get(`/api/items/${id}/poster`)).status())
+    .toBe(200);
+  await newNote(page);
+  const note = `Markdown peek ${Date.now()}`;
+  await page.getByLabel('Note title').fill(note);
+  await page.getByLabel('Markdown content').fill('## Rendered preview');
+  await saved(page);
+  await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.getByRole('button', { name: `Preview ${note}` }).focus();
+  await expect(page.locator('.note-peek h2')).toHaveText('Rendered preview');
+});
 
 test('tag workspace reviews and applies a merge before relabeling items', async ({ page }) => {
   const stamp = Date.now();
   const from = `Draft-${stamp}`;
   const to = `Reference-${stamp}`;
   await page.goto('/');
-  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await newNote(page);
   await page.getByLabel('Note title').fill(`Tag cleanup ${stamp}`);
   await page.getByLabel('Tags', { exact: true }).fill(`${from}, ${to}`);
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await saved(page);
   await page
     .getByRole('button', { name: /^All Tags/i })
     .first()
@@ -57,7 +135,7 @@ test('desktop reverse image search waits for the provider choice and user action
   });
   await expect(page.getByLabel('Item title')).toHaveValue(filename);
   await page.getByRole('button', { name: 'Close details' }).click();
-  await page.getByRole('button', { name: `Actions for ${filename}` }).click();
+  await page.locator('.asset-open').filter({ hasText: filename }).click({ button: 'right' });
   await page.getByRole('button', { name: 'Search web by image…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Search web by image' });
   await dialog.getByLabel('Search provider').selectOption('tineye');
@@ -74,12 +152,11 @@ test('desktop reverse image search waits for the provider choice and user action
 test('bulk organization, sorting and full-screen preview work together', async ({ page }) => {
   await page.goto('/');
   const title = `Bulk preview ${Date.now()}`;
-  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await newNote(page);
   await page.getByLabel('Note title').fill(title);
   await page.getByLabel('Markdown content').fill('# A larger preview');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Changes saved');
-  await page.getByRole('button', { name: 'Close details' }).click();
+  await saved(page);
+  await page.getByRole('button', { name: 'Library', exact: true }).click();
   await page.getByLabel(`Select ${title}`, { exact: true }).check();
   await page.getByLabel('Bulk tag').fill('batch-tag');
   await page.getByRole('button', { name: 'Add tag', exact: true }).click();
@@ -107,14 +184,13 @@ test('create, relate, edit, search, export, trash and restore real library items
   await expect(
     page.getByRole('button', { name: new RegExp(`Project ${unique}`) }).first(),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await newNote(page);
   await page.getByLabel('Note title').fill(`Research ${unique}`);
   await page.getByLabel('Markdown content').fill('# Research\n\nLocal notes with **context**.');
   await page.getByLabel('Tags', { exact: true }).fill('research, inspiration');
   await page.getByText('Add or remove folders', { exact: true }).click();
   await page.getByRole('checkbox', { name: `Project ${unique}`, exact: true }).check();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await saved(page);
   await page.reload();
   await page
     .getByRole('button')
@@ -124,7 +200,7 @@ test('create, relate, edit, search, export, trash and restore real library items
   await expect(page.getByLabel('Markdown content')).toHaveValue(
     '# Research\n\nLocal notes with **context**.',
   );
-  await page.getByRole('button', { name: 'Close details' }).click();
+  await page.getByRole('button', { name: 'Library', exact: true }).click();
   await page.getByLabel('Import files', { exact: true }).setInputFiles({
     name: `reference-${unique}.png`,
     mimeType: 'image/png',
@@ -137,7 +213,7 @@ test('create, relate, edit, search, export, trash and restore real library items
   await expect(page.locator('.preview img')).toHaveJSProperty('naturalWidth', 1);
   await page.getByLabel('Related item').selectOption({ label: `Research ${unique}` });
   await page.getByLabel('Add relation', { exact: true }).click();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await saved(page);
   await expect(page.getByText('related to', { exact: false }).first()).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Export original' }).click();
@@ -148,17 +224,18 @@ test('create, relate, edit, search, export, trash and restore real library items
   await page.getByRole('button', { name: 'Close details' }).click();
   await page.getByRole('button', { name: 'All items', exact: false }).click();
   await page.getByLabel('Search library').fill(`reference-${unique}`);
-  await page.getByRole('button', { name: 'Table view' }).click();
+  await page.getByRole('button', { name: 'List view' }).click();
   await expect(page.getByRole('table')).toContainText(`reference-${unique}.png`);
   await page.getByLabel('Search library').fill('');
   await page.getByRole('button', { name: 'Graph view' }).click();
   await expect(page.getByLabel('Relations graph')).toBeVisible();
 });
-test('stale browser save preserves the draft and navigation can be cancelled', async ({ page }) => {
+test('autosave preserves overlapping local and external edits until resolved', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New note', exact: true }).click();
-  const title = await page.getByLabel('Note title').inputValue();
-  await page.getByLabel('Markdown content').fill('My unsaved draft');
+  await newNote(page);
+  const title = `Autosave conflict ${Date.now()}`;
+  await page.getByLabel('Note title').fill(title);
+  await saved(page);
   await page.evaluate(async (title) => {
     const library = await (await fetch('/api/library')).json();
     const note = library.items.find((item: { title: string }) => item.title === title);
@@ -169,12 +246,14 @@ test('stale browser save preserves the draft and navigation can be cancelled', a
     });
     if (!response.ok) throw new Error('Fixture update failed');
   }, title);
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('changed elsewhere');
+  await page.getByLabel('Markdown content').fill('My unsaved draft');
+  await expect(page.getByRole('alert')).toContainText('edited elsewhere');
+  await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.reload();
+  await page.locator('.asset-open').filter({ hasText: title }).click();
   await expect(page.getByLabel('Markdown content')).toHaveValue('My unsaved draft');
-  page.once('dialog', (dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: 'Close details' }).click();
-  await expect(page.getByLabel('Markdown content')).toHaveValue('My unsaved draft');
+  await page.getByRole('button', { name: 'Keep my edits' }).click();
+  await saved(page);
 });
 test('phone layout supports navigation and notes without horizontal page overflow', async ({
   page,
@@ -184,11 +263,10 @@ test('phone layout supports navigation and notes without horizontal page overflo
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('button', { name: /^Notes/ }).click();
   await expect(page.getByRole('heading', { name: /Notes/ })).toBeVisible();
-  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await newNote(page);
   await page.getByLabel('Note title').fill('Phone note');
   await page.getByLabel('Markdown content').fill('Phone draft');
-  await page.getByRole('button', { name: 'Save note', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await saved(page);
   await expect(page.getByLabel('Markdown content')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -208,20 +286,19 @@ test('image quick preview, colors, gallery layouts and linked note editing', asy
   });
   await expect(page.getByLabel('Image colors')).toBeVisible();
   await page.getByRole('button', { name: 'Close details' }).click();
-  for (const view of ['Justified', 'Waterfall', 'Grid']) {
+  for (const view of ['Justified', 'Waterfall']) {
+    await page.getByLabel('View options').click();
     await page.getByRole('button', { name: `${view} view` }).click();
-    await expect(page.getByRole('button', { name: `${view} view` })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await expect(page.locator('.asset-open').filter({ hasText: filename })).toBeVisible();
   }
+  await page.getByRole('button', { name: 'Grid view' }).click();
   const card = page.locator('.asset-card').filter({ hasText: filename });
   await card.hover();
   await card.getByRole('button', { name: `Preview ${filename}`, exact: true }).click();
   await expect(page.getByRole('dialog', { name: `Preview ${filename}` })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await newNote(page);
   await page.getByLabel('Note title').fill('Reference study');
   const editor = page.getByLabel('Markdown content');
   await editor.fill('/heading 2');
@@ -236,8 +313,7 @@ test('image quick preview, colors, gallery layouts and linked note editing', asy
   await page.getByRole('button', { name: new RegExp(filename) }).click();
   await expect(editor).toHaveValue(/## Palette\n\n!\[Canvas.*\]\(atlas:/);
   await page.getByRole('button', { name: 'Read', exact: true }).click();
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await saved(page);
   await expect(page.getByRole('button', { name: 'Read', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -253,11 +329,10 @@ test('saving with a selected related item keeps the link and lets you open it', 
   const title = `Linked note ${suffix}`;
   const filename = `Linked asset ${suffix}.txt`;
   await page.goto('/');
-  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await newNote(page);
   await page.getByLabel('Note title').fill(title);
-  await page.getByRole('button', { name: 'Save note', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Changes saved');
-  await page.getByRole('button', { name: 'Close details' }).click();
+  await saved(page);
+  await page.getByRole('button', { name: 'Library', exact: true }).click();
   await page
     .getByRole('navigation', { name: 'Library navigation' })
     .getByRole('button', { name: /^All items/ })
@@ -269,7 +344,8 @@ test('saving with a selected related item keeps the link and lets you open it', 
   });
   await expect(page.getByLabel('Item title')).toHaveValue(filename);
   await page.getByLabel('Related item').selectOption({ label: title });
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByLabel('Add relation', { exact: true }).click();
+  await saved(page);
   await expect(page.getByLabel('Related item')).toHaveValue('');
   await page.reload();
   await page.getByLabel('Search library').fill(filename);
@@ -295,7 +371,14 @@ test('nested folder, clipboard import, Smart Folder, and Trash Undo work across 
   await page.getByRole('button', { name: 'New collection' }).click();
   await page.getByLabel('Folder name').fill(parent);
   await page.getByLabel('Folder name').press('Enter');
-  await page.getByRole('button', { name: `Add subfolder to ${parent}` }).click();
+  await page
+    .getByRole('navigation', { name: 'Folder tree' })
+    .getByRole('button', { name: new RegExp(`^${parent}`) })
+    .click({ button: 'right' });
+  await page
+    .getByRole('dialog', { name: 'Folder actions' })
+    .getByRole('button', { name: 'New subfolder' })
+    .click();
   await page.getByLabel('Folder name').fill(child);
   await page.getByLabel('Folder name').press('Enter');
   await expect(page.getByRole('heading', { name: new RegExp(child) })).toBeVisible();
@@ -318,6 +401,9 @@ test('nested folder, clipboard import, Smart Folder, and Trash Undo work across 
   await tree.getByRole('button', { name: `Collapse ${parent}` }).click();
   await expect(tree.getByRole('button', { name: new RegExp(child) })).toHaveCount(0);
   await tree.getByRole('button', { name: new RegExp(`^${parent} 1$`) }).click();
+  await expect(page.getByRole('region', { name: 'Subfolders' }).getByText(child)).toBeVisible();
+  await expect(page.locator('.asset-open').filter({ hasText: title })).toHaveCount(0);
+  await page.getByLabel('Show subfolder contents').check();
   await expect(page.locator('.asset-open').filter({ hasText: title })).toBeVisible();
   const smart = `Rule ${suffix}`;
   await page.getByRole('button', { name: 'New Smart Folder', exact: true }).click();
@@ -327,7 +413,7 @@ test('nested folder, clipboard import, Smart Folder, and Trash Undo work across 
   await expect(dialog.getByRole('status')).toHaveText('1 matching items');
   await dialog.getByRole('button', { name: 'Save Smart Folder' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(smart) })).toBeVisible();
-  await page.getByRole('button', { name: `Actions for ${title}` }).click();
+  await page.locator('.asset-open').filter({ hasText: title }).click({ button: 'right' });
   await page
     .getByRole('dialog', { name: 'Item actions' })
     .getByRole('button', { name: 'Move to Trash', exact: true })

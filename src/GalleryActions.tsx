@@ -3,6 +3,89 @@ import { Film, Search, X } from 'lucide-react';
 import type { Item } from '../shared/model';
 import { imageSearchProviders, type ImageSearchProvider } from '../shared/image-search';
 import { WorkspaceDialog } from './WorkspaceTools';
+import ReactMarkdown from 'react-markdown';
+
+const posters = new Map<string, Promise<Blob>>();
+let posterQueue = Promise.resolve();
+
+async function generatePoster(id: string) {
+  const video = document.createElement('video');
+  const waitFor = (event: string, start: () => void) =>
+    new Promise<void>((resolve, reject) => {
+      const finish = (error?: Error) => {
+        clearTimeout(timeout);
+        video.removeEventListener(event, success);
+        video.removeEventListener('error', failure);
+        if (error) reject(error);
+        else resolve();
+      };
+      const success = () => finish();
+      const failure = () => finish(new Error('Video could not be decoded.'));
+      const timeout = window.setTimeout(failure, 7000);
+      video.addEventListener(event, success, { once: true });
+      video.addEventListener('error', failure, { once: true });
+      start();
+    });
+  try {
+    video.preload = 'auto';
+    video.muted = true;
+    await waitFor('loadeddata', () => {
+      video.src = `/api/items/${id}/content`;
+    });
+    if (video.duration > 0.5 && Number.isFinite(video.duration))
+      await waitFor('seeked', () => {
+        video.currentTime = Math.min(video.duration * 0.15, 4);
+      });
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 480 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Video thumbnail unavailable.');
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('Video thumbnail unavailable.'))),
+        'image/webp',
+        0.82,
+      ),
+    );
+  } finally {
+    video.removeAttribute('src');
+    video.load();
+  }
+}
+
+function videoPoster(item: Item) {
+  const key = item.hash ?? item.id;
+  const existing = posters.get(key);
+  if (existing) return existing;
+  const path = `/api/items/${item.id}/poster`;
+  const promise = fetch(path).then((response) => {
+    if (response.ok) return response.blob();
+    if (response.status !== 404) throw new Error('Video thumbnail unavailable.');
+    const work = posterQueue.then(() => generatePoster(item.id));
+    posterQueue = work.then(
+      () => {},
+      () => {},
+    );
+    return work.then((blob) => {
+      if (blob.type === 'image/webp')
+        void fetch(path, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/webp' },
+          body: blob,
+        }).catch(() => {});
+      return blob;
+    });
+  });
+  posters.set(key, promise);
+  void promise.then(
+    () => posters.delete(key),
+    () => posters.delete(key),
+  );
+  return promise;
+}
 
 async function avifSearchCopy(id: string) {
   const image = new Image();
@@ -111,10 +194,37 @@ export function InlineVideo({
 }) {
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
+  const [poster, setPoster] = useState('');
   const ref = useRef<HTMLVideoElement>(null);
+  const tile = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let live = true;
+    let url = '';
+    const observe = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        observe.disconnect();
+        void videoPoster(item)
+          .then((blob) => {
+            if (!live) return;
+            url = URL.createObjectURL(blob);
+            setPoster(url);
+          })
+          .catch(() => {});
+      },
+      { rootMargin: '120px' },
+    );
+    observe.observe(tile.current!);
+    return () => {
+      live = false;
+      observe.disconnect();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [item.id, item.hash]);
   return (
     <div
       className="inline-video"
+      ref={tile}
       onPointerEnter={(e) => {
         if (e.pointerType === 'mouse') setPlaying(true);
       }}
@@ -137,6 +247,8 @@ export function InlineVideo({
             {Math.floor(time / 60)}:{String(Math.floor(time % 60)).padStart(2, '0')}
           </small>
         </>
+      ) : poster ? (
+        <img alt="" src={poster} />
       ) : (
         <span>
           <Film size={27} />
@@ -150,7 +262,32 @@ export function HoverPeek({ item }: { item: Item }) {
   const src = `/api/items/${item.id}/content`;
   return (
     <div className="hover-peek" aria-hidden="true">
-      {item.mime.startsWith('image/') ? (
+      {item.kind === 'note' ? (
+        <article className="note-peek">
+          <strong>{item.title}</strong>
+          <ReactMarkdown
+            skipHtml
+            allowedElements={[
+              'p',
+              'h1',
+              'h2',
+              'h3',
+              'strong',
+              'em',
+              'ul',
+              'ol',
+              'li',
+              'blockquote',
+              'pre',
+              'code',
+              'hr',
+            ]}
+            unwrapDisallowed
+          >
+            {item.body.slice(0, 1600) || 'Empty note'}
+          </ReactMarkdown>
+        </article>
+      ) : item.mime.startsWith('image/') ? (
         <img alt="" src={src} />
       ) : (
         <video muted autoPlay playsInline src={src} />
@@ -163,11 +300,13 @@ export function ItemMenu({
   y,
   onClose,
   actions,
+  label = 'Item actions',
 }: {
   x: number;
   y: number;
   onClose: () => void;
   actions: { label: string; run: () => void }[];
+  label?: string;
 }) {
   const [query, setQuery] = useState('');
   const panel = useRef<HTMLDivElement>(null);
@@ -187,7 +326,7 @@ export function ItemMenu({
         ref={panel}
         className="item-menu"
         role="dialog"
-        aria-label="Item actions"
+        aria-label={label}
         aria-modal="true"
         style={{
           left: Math.max(8, Math.min(x, innerWidth - 258)),

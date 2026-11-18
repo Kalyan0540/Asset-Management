@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('atlasDesktop', {
   appearance: () => ipcRenderer.invoke('atlas:appearance'),
+  readDrafts: () => ipcRenderer.invoke('atlas:read-drafts'),
+  writeDrafts: (drafts: unknown) => ipcRenderer.invoke('atlas:write-drafts', drafts),
   setAppearance: (value: string) => ipcRenderer.invoke('atlas:set-appearance', value),
   libraries: () => ipcRenderer.invoke('atlas:libraries'),
   libraryAction: (action: string, path?: string) =>

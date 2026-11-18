@@ -12,6 +12,7 @@ import {
   openSync,
   fsyncSync,
   closeSync,
+  mkdirSync,
 } from 'node:fs';
 import { join, resolve, relative, isAbsolute, extname, basename, sep } from 'node:path';
 import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
@@ -308,13 +309,53 @@ export function createLibraryServer(options: {
           }
         }
         const match = url.pathname.match(
-          /^\/api\/items\/([\w-]+)(?:\/(history|restore|content))?$/,
+          /^\/api\/items\/([\w-]+)(?:\/(history|restore|content|poster))?$/,
         );
         if (match) {
           const [, id, action] = match;
           if (!action && req.method === 'GET') return json(res, 200, library.get(id));
           if (!action && req.method === 'PATCH')
             return json(res, 200, library.patch(id, await body(req), actor));
+          if (action === 'poster' && ['GET', 'PUT'].includes(req.method ?? '')) {
+            const item = library.get(id);
+            if (!item.mime.startsWith('video/') || !/^[a-f0-9]{64}$/.test(item.hash ?? ''))
+              throw new LibraryError(404, 'This item has no video poster.');
+            const cache = join(library.root, 'staging', 'video-posters');
+            const path = join(cache, `${item.hash}-v1.webp`);
+            if (req.method === 'GET') {
+              if (!existsSync(path)) throw new LibraryError(404, 'Video poster is not cached.');
+              res.writeHead(200, {
+                'Content-Type': 'image/webp',
+                'Cache-Control': 'private, max-age=86400',
+              });
+              await pipeline(createReadStream(path), res);
+              return;
+            }
+            if (req.headers['content-type'] !== 'image/webp')
+              throw new LibraryError(415, 'Expected a WebP poster.');
+            const parts: Buffer[] = [];
+            let size = 0;
+            for await (const chunk of req) {
+              size += chunk.length;
+              if (size > 400_000) throw new LibraryError(413, 'Video poster is too large.');
+              parts.push(chunk);
+            }
+            const poster = Buffer.concat(parts);
+            if (
+              poster.toString('ascii', 0, 4) !== 'RIFF' ||
+              poster.toString('ascii', 8, 12) !== 'WEBP'
+            )
+              throw new LibraryError(400, 'Invalid video poster.');
+            mkdirSync(cache, { recursive: true, mode: 0o700 });
+            const temp = `${path}.${randomUUID()}.tmp`;
+            try {
+              writeFileSync(temp, poster, { flag: 'wx', mode: 0o600 });
+              renameSync(temp, path);
+            } finally {
+              if (existsSync(temp)) unlinkSync(temp);
+            }
+            return json(res, 200, { ok: true });
+          }
           if (action === 'history' && req.method === 'GET')
             return json(res, 200, library.history(id));
           if (action === 'restore' && req.method === 'POST') {

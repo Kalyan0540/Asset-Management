@@ -2,18 +2,23 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, FolderOpen, Pencil, Plus, Search, X } from 'lucide-react';
 import {
   filterFields,
+  fileType,
   matchesSmartFolder,
+  normalizeHex,
   type FilterRule,
   type SmartFolder,
   type VisualInfo,
 } from '../shared/filters.ts';
 import type { Collection, Item, TagChange, TagChangePreview } from '../shared/model.ts';
 import type { ImageSearchProvider } from '../shared/image-search.ts';
+import type { Drafts } from './useAutosave';
 
 declare global {
   interface Window {
     atlasDesktop?: {
       appearance: () => Promise<'system' | 'light' | 'dark'>;
+      readDrafts?: () => Promise<Drafts>;
+      writeDrafts?: (drafts: Drafts) => Promise<void>;
       setAppearance: (value: 'system' | 'light' | 'dark') => Promise<void>;
       libraries: () => Promise<{ active: string; entries: { path: string; name: string }[] }>;
       libraryAction: (
@@ -26,7 +31,13 @@ declare global {
     };
   }
 }
-export function LibraryPicker({ onError }: { onError: (message: string) => void }) {
+export function LibraryPicker({
+  onError,
+  onRepair,
+}: {
+  onError: (message: string) => void;
+  onRepair: () => void;
+}) {
   const [data, setData] =
     useState<Awaited<ReturnType<NonNullable<Window['atlasDesktop']>['libraries']>>>();
   const [query, setQuery] = useState('');
@@ -107,6 +118,15 @@ export function LibraryPicker({ onError }: { onError: (message: string) => void 
             folders.
           </p>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            ref.current?.removeAttribute('open');
+            onRepair();
+          }}
+        >
+          Repair Eagle folders…
+        </button>
       </div>
     </details>
   );
@@ -124,6 +144,7 @@ const newRule = (field: FilterRule['field']): FilterRule => ({
   field,
   operator: field === 'name' ? 'contains' : 'is',
   value: '',
+  ...(field === 'color' ? { tolerance: 12 } : {}),
 });
 function RuleValue({
   rule,
@@ -170,7 +191,7 @@ function RuleValue({
         <input
           type="color"
           aria-label="Choose a swatch"
-          value={/^#[a-f0-9]{6}$/i.test(rule.value) ? rule.value : '#d8b482'}
+          value={normalizeHex(rule.value) ?? '#d8b482'}
           onChange={(e) => onChange(e.target.value)}
         />
       )}
@@ -188,6 +209,93 @@ function RuleValue({
         onChange={(e) => onChange(e.target.value)}
       />
     </div>
+  );
+}
+export type TypeSelection = Record<string, 'include' | 'exclude'>;
+export function TypePicker({
+  items,
+  selection,
+  setSelection,
+}: {
+  items: Item[];
+  selection: TypeSelection;
+  setSelection: (selection: TypeSelection) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const counts = new Map<string, number>();
+  for (const item of items) counts.set(fileType(item), (counts.get(fileType(item)) ?? 0) + 1);
+  const chosen = Object.keys(selection);
+  function toggle(type: string, mode: 'include' | 'exclude') {
+    const next = { ...selection };
+    if (selection[type] === mode) delete next[type];
+    else next[type] = mode;
+    setSelection(next);
+  }
+  return (
+    <details
+      className="types-picker"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          e.currentTarget.open = false;
+          e.currentTarget.querySelector('summary')?.focus();
+        }
+      }}
+    >
+      <summary aria-label="Filter file types">
+        {chosen.length ? `${chosen.length} types` : 'All types'} <ChevronDown size={12} />
+      </summary>
+      <div className="filter-popover">
+        <input
+          value={query}
+          aria-label="Find a file type"
+          placeholder="Find a type…"
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <div className="types-choices">
+          {[...new Set([...counts.keys(), ...chosen])]
+            .sort()
+            .filter((type) => type.includes(query.trim().toLowerCase()))
+            .map((type) => (
+              <div
+                className="types-row"
+                key={type}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  toggle(type, 'exclude');
+                }}
+              >
+                <label>
+                  <input
+                    type="checkbox"
+                    aria-label={`Include ${type}`}
+                    checked={selection[type] === 'include'}
+                    onChange={() => toggle(type, 'include')}
+                  />{' '}
+                  {type} <small>{counts.get(type) ?? 0}</small>
+                </label>
+                <button
+                  type="button"
+                  className="text-button"
+                  aria-label={`Exclude ${type}`}
+                  aria-pressed={selection[type] === 'exclude'}
+                  onClick={() => toggle(type, 'exclude')}
+                >
+                  Exclude
+                </button>
+              </div>
+            ))}
+        </div>
+        <button
+          type="button"
+          className="text-button"
+          disabled={!chosen.length}
+          onClick={() => setSelection({})}
+        >
+          Clear types
+        </button>
+      </div>
+    </details>
   );
 }
 export function FilterStrip({
@@ -223,90 +331,94 @@ export function FilterStrip({
         if (e.key === 'Escape') setOpen(null);
       }}
     >
-      {filterFields.map((field) => (
-        <div className="filter-slot" key={field}>
-          <button
-            className="filter-button"
-            type="button"
-            aria-expanded={open === field}
-            data-active={rules.some((r) => r.field === field)}
-            onClick={() => {
-              setDraft(rules.find((r) => r.field === field) ?? newRule(field));
-              setOpen(open === field ? null : field);
-            }}
-          >
-            {fieldLabels[field]} <ChevronDown size={11} />
-          </button>
-          {open === field && (
-            <form
-              className="filter-popover"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (draft.value.trim())
-                  setRules([
-                    ...rules.filter((r) => r.field !== field),
-                    { ...draft, value: draft.value.trim() },
-                  ]);
-                setOpen(null);
+      {filterFields
+        .filter((field) => field !== 'type')
+        .map((field) => (
+          <div className="filter-slot" key={field}>
+            <button
+              className="filter-button"
+              type="button"
+              aria-expanded={open === field}
+              data-active={rules.some((r) => r.field === field)}
+              onClick={() => {
+                setDraft(rules.find((r) => r.field === field) ?? newRule(field));
+                setOpen(open === field ? null : field);
               }}
             >
-              <label>
-                Condition{' '}
-                <select
-                  aria-label="Filter operator"
-                  value={draft.operator}
-                  onChange={(e) =>
-                    setDraft({ ...draft, operator: e.target.value as FilterRule['operator'] })
-                  }
-                >
-                  {(field === 'folder' ||
-                  field === 'rating' ||
-                  field === 'shape' ||
-                  field === 'color'
-                    ? ['is', 'is not']
-                    : ['contains', 'is', 'is not']
-                  ).map((op) => (
-                    <option key={op}>{op}</option>
-                  ))}
-                </select>
-              </label>
-              <RuleValue
-                rule={draft}
-                onChange={(value) => setDraft({ ...draft, value })}
-                collections={collections}
-                tags={tags}
-              />
-              {field === 'color' && (
+              {fieldLabels[field]} <ChevronDown size={11} />
+            </button>
+            {open === field && (
+              <form
+                className="filter-popover"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const value = field === 'color' ? normalizeHex(draft.value) : draft.value.trim();
+                  if (value)
+                    setRules([...rules.filter((r) => r.field !== field), { ...draft, value }]);
+                  setOpen(null);
+                }}
+              >
                 <label>
-                  Color tolerance{' '}
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={draft.tolerance ?? 0}
-                    onChange={(e) => setDraft({ ...draft, tolerance: Number(e.target.value) })}
-                  />
+                  Condition{' '}
+                  <select
+                    aria-label="Filter operator"
+                    value={draft.operator}
+                    onChange={(e) =>
+                      setDraft({ ...draft, operator: e.target.value as FilterRule['operator'] })
+                    }
+                  >
+                    {(field === 'folder' ||
+                    field === 'rating' ||
+                    field === 'shape' ||
+                    field === 'color'
+                      ? ['is', 'is not']
+                      : ['contains', 'is', 'is not']
+                    ).map((op) => (
+                      <option key={op}>{op}</option>
+                    ))}
+                  </select>
                 </label>
-              )}
-              <div className="workspace-button-row">
-                <button type="submit" className="primary" disabled={!draft.value.trim()}>
-                  Apply
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setRules(rules.filter((r) => r.field !== field));
-                    setOpen(null);
-                  }}
-                >
-                  Clear
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      ))}
+                <RuleValue
+                  rule={draft}
+                  onChange={(value) => setDraft({ ...draft, value })}
+                  collections={collections}
+                  tags={tags}
+                />
+                {field === 'color' && (
+                  <label>
+                    Color tolerance{' '}
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={draft.tolerance ?? 0}
+                      onChange={(e) => setDraft({ ...draft, tolerance: Number(e.target.value) })}
+                    />
+                  </label>
+                )}
+                <div className="workspace-button-row">
+                  <button
+                    type="submit"
+                    className="primary"
+                    disabled={field === 'color' ? !normalizeHex(draft.value) : !draft.value.trim()}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setRules(rules.filter((r) => r.field !== field));
+                      setOpen(null);
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        ))}
       {rules.length > 0 && (
         <>
           <button className="text-button" onClick={() => setRules([])}>

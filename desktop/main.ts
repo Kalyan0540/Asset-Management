@@ -12,7 +12,7 @@ import {
 import { basename, extname, join } from 'node:path';
 import { copyFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, renameSync } from 'node:fs';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { createLibraryServer } from '../server/http.ts';
@@ -213,6 +213,25 @@ function checkWindow(event: Electron.IpcMainInvokeEvent) {
 ipcMain.handle('atlas:appearance', (event) => {
   checkWindow(event);
   return preferences().appearance ?? 'system';
+});
+ipcMain.handle('atlas:read-drafts', (event) => {
+  checkWindow(event);
+  const file = join(root, 'staging', 'editor-drafts.json');
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+});
+ipcMain.handle('atlas:write-drafts', (event, drafts: unknown) => {
+  checkWindow(event);
+  if (!drafts || typeof drafts !== 'object' || Array.isArray(drafts))
+    throw new Error('Invalid drafts.');
+  const data = JSON.stringify(drafts);
+  if (Buffer.byteLength(data) > 12_000_000) throw new Error('Too much pending text to recover.');
+  const file = join(root, 'staging', 'editor-drafts.json');
+  if (data === '{}') {
+    rmSync(file, { force: true });
+    return;
+  }
+  writeFileSync(file + '.tmp', data, { mode: 0o600 });
+  renameSync(file + '.tmp', file);
 });
 ipcMain.handle('atlas:set-appearance', (event, value: unknown) => {
   checkWindow(event);

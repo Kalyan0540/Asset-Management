@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
   Archive,
-  ArrowDownToLine,
   Check,
+  Minus,
+  ArrowDownToLine,
   ChevronRight,
   File,
   FileText,
@@ -36,22 +37,24 @@ import {
   Sparkles,
   Clock3,
   Shuffle,
-  FolderPlus,
-  Pin,
 } from 'lucide-react';
-import cytoscape from 'cytoscape';
+import { GraphView } from './GraphView';
+import { ImageDetail } from './ImageDetail';
 import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table';
 import type { Item, ItemPatch, Collection, LibrarySnapshot, HistoryEntry } from '../shared/model';
 import './styles.css';
 import './workspace.css';
+import { useAutosave } from './useAutosave';
 import { BulkBar, Lightbox } from './LibraryTools';
 import { AiPanel } from './AiPanel';
-import { NoteEditor, noteReferences } from './NoteEditor';
+import { NoteEditor } from './NoteEditor';
 import { Gallery, type GalleryView, type Dimensions } from './Gallery';
 import { ImageProperties, imageColors } from './ImageProperties';
 import {
   LibraryPicker,
   FilterStrip,
+  TypePicker,
+  type TypeSelection,
   SmartEditor,
   TagWorkspace,
   WorkspaceDialog,
@@ -60,6 +63,7 @@ import { HoverPeek, InlineVideo, ItemMenu, ReverseImageDialog } from './GalleryA
 import { imageSearchExtension } from '../shared/image-search';
 import { descendantIds } from '../shared/collections';
 import {
+  fileType,
   matchesRule,
   matchesSmartFolder,
   type FilterRule,
@@ -73,7 +77,8 @@ async function api<T>(path: string, method = 'GET', data?: unknown): Promise<T> 
     body: data === undefined ? undefined : JSON.stringify(data),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? 'Request failed');
+  if (!response.ok)
+    throw Object.assign(new Error(result.error ?? 'Request failed'), { status: response.status });
   return result;
 }
 const content = (item: Item, download = false) =>
@@ -141,10 +146,12 @@ function TableView({
   items,
   onSelect,
   selected,
+  onMenu,
 }: {
   items: Item[];
   onSelect: (id: string) => void;
   selected: string | null;
+  onMenu: (item: Item, x: number, y: number) => void;
 }) {
   const columns = useMemo<ColumnDef<Item>[]>(
     () => [
@@ -184,11 +191,40 @@ function TableView({
         </thead>
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className={selected === row.original.id ? 'selected' : ''}>
+            <tr
+              key={row.id}
+              data-item-id={row.original.id}
+              className={selected === row.original.id ? 'selected' : ''}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                onMenu(row.original, event.clientX, event.clientY);
+              }}
+            >
               {row.getVisibleCells().map((cell, i) => (
                 <td key={cell.id}>
                   {i === 0 ? (
-                    <button className="cell-button" onClick={() => onSelect(row.original.id)}>
+                    <button
+                      className="cell-button"
+                      onClick={() => onSelect(row.original.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          const row = event.currentTarget.closest('tr');
+                          const next =
+                            event.key === 'ArrowUp'
+                              ? row?.previousElementSibling
+                              : row?.nextElementSibling;
+                          next?.querySelector<HTMLButtonElement>('.cell-button')?.focus();
+                        } else if (
+                          event.key === 'ContextMenu' ||
+                          (event.key === 'F10' && event.shiftKey)
+                        ) {
+                          event.preventDefault();
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          onMenu(row.original, rect.left, rect.bottom);
+                        }
+                      }}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </button>
                   ) : (
@@ -200,78 +236,6 @@ function TableView({
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-function GraphView({ items, onSelect }: { items: Item[]; onSelect: (id: string) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const visible = items.slice(0, 250),
-      ids = new Set(visible.map((i) => i.id));
-    const graph = cytoscape({
-      container: ref.current!,
-      elements: [
-        ...visible.map((i) => ({ data: { id: i.id, label: i.title, kind: i.kind } })),
-        ...visible.flatMap((i) => {
-          const references = i.kind === 'note' ? noteReferences(i.body) : [];
-          return [
-            ...i.relations,
-            ...references
-              .filter((id) => id !== i.id && !i.relations.some((r) => r.target === id))
-              .map((target) => ({ target, label: 'note link' })),
-          ]
-            .filter((r) => ids.has(r.target))
-            .map((r, n) => ({
-              data: { id: `${i.id}-${n}`, source: i.id, target: r.target, label: r.label },
-            }));
-        }),
-      ],
-      style: [
-        {
-          selector: 'node',
-          style: {
-            'background-color': '#d5ab70',
-            label: 'data(label)',
-            color: '#b7b8bd',
-            'font-size': 11,
-            'text-valign': 'bottom',
-            'text-margin-y': 9,
-            width: 18,
-            height: 18,
-            'text-max-width': '110px',
-            'text-wrap': 'ellipsis',
-          },
-        },
-        { selector: 'node[kind="note"]', style: { 'background-color': '#9ba7d5' } },
-        {
-          selector: 'edge',
-          style: {
-            width: 1.5,
-            'line-color': '#494c55',
-            'target-arrow-color': '#494c55',
-            'target-arrow-shape': 'triangle',
-            'curve-style': 'bezier',
-            label: 'data(label)',
-            'font-size': 9,
-            color: '#777b86',
-            'text-background-color': '#191a1d',
-            'text-background-opacity': 1,
-          },
-        },
-      ],
-      layout: { name: 'cose', animate: false, nodeRepulsion: () => 8000 },
-      minZoom: 0.3,
-      maxZoom: 3,
-    });
-    graph.on('tap', 'node', (event) => onSelect(event.target.id()));
-    return () => graph.destroy();
-  }, [items, onSelect]);
-  return (
-    <div className="graph-view">
-      <div ref={ref} className="graph-canvas" aria-label="Relations graph" />
-      <p>
-        Showing up to 250 items · Select a node to inspect it. The table offers keyboard access.
-      </p>
     </div>
   );
 }
@@ -308,12 +272,17 @@ function Preview({ item }: { item: Item }) {
 }
 function Inspector({
   item,
+  draft,
+  saving,
+  problem,
+  onEdit,
+  onRetry,
+  onUseSaved,
   items,
   collections,
   onClose,
   onSave,
   onRestore,
-  onDirty,
   editorHost,
   onOpen,
   noteReading,
@@ -326,68 +295,89 @@ function Inspector({
   onClose: () => void;
   onSave: (p: ItemPatch) => Promise<void>;
   onRestore: (revision: number) => Promise<void>;
-  onDirty: (dirty: boolean) => void;
+  draft: Item;
+  saving: boolean;
+  problem?: { message: string; conflict: boolean };
+  onEdit: (fields: Partial<ItemPatch>) => void;
+  onRetry: (overwrite?: boolean) => void;
+  onUseSaved: () => void;
   editorHost: HTMLDivElement | null;
   onOpen: (id: string) => void;
   noteReading: boolean;
   onNoteReadingChange: (reading: boolean) => void;
   onColorFilter: (color: string) => void;
 }) {
-  const [draft, setDraft] = useState(item),
-    [tags, setTags] = useState(item.tags.join(', ')),
-    [history, setHistory] = useState<HistoryEntry[]>([]),
-    [busy, setBusy] = useState(false),
-    [target, setTarget] = useState(''),
-    [label, setLabel] = useState('related to');
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [target, setTarget] = useState('');
+  const [label, setLabel] = useState('related to');
+  const [tagText, setTagText] = useState<string>();
+  const tags = tagText ?? draft.tags.join(', ');
   const pendingRelation = items.some((candidate) => candidate.id === target && !candidate.trashed)
     ? { target, label: label.trim() || 'related to' }
     : null;
-  const relations =
-    pendingRelation &&
-    !draft.relations.some(
-      (relation) =>
-        relation.target === pendingRelation.target && relation.label === pendingRelation.label,
-    )
-      ? [...draft.relations, pendingRelation]
-      : draft.relations;
-  const dirty =
-    JSON.stringify(draft) !== JSON.stringify(item) ||
-    tags !== item.tags.join(', ') ||
-    relations !== draft.relations;
   useEffect(() => {
-    onDirty(dirty);
-    return () => onDirty(false);
-  }, [dirty, onDirty]);
-  useEffect(() => {
+    let current = true;
+    if (!item.id) return;
     api<HistoryEntry[]>(`/items/${item.id}/history`)
-      .then(setHistory)
-      .catch(() => setHistory([]));
-  }, [item.id, item.revision]);
-  const field = <K extends keyof Item>(key: K, value: Item[K]) =>
-    setDraft((v) => ({ ...v, [key]: value }));
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await onSave({
-        expectedRevision: item.revision,
-        title: draft.title,
-        description: draft.description,
-        tags: tags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
-        collections: draft.collections,
-        relations,
-        ...(item.kind === 'note' ? { body: draft.body } : {}),
-        favorite: draft.favorite,
-        rating: draft.rating,
-        sourceUrl: draft.sourceUrl,
+      .then((rows) => {
+        if (current) setHistory(rows);
+      })
+      .catch(() => {
+        if (current) setHistory([]);
       });
-    } finally {
-      setBusy(false);
-    }
-  };
+    return () => {
+      current = false;
+    };
+  }, [item.id, item.revision]);
+  const field = <K extends keyof Item>(key: K, value: Item[K]) => onEdit({ [key]: value });
+  function editTags(value: string) {
+    setTagText(value);
+    onEdit({
+      tags: [
+        ...new Set(
+          value
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+        ),
+      ],
+    });
+  }
+  function addRelation() {
+    if (!pendingRelation) return;
+    if (
+      !draft.relations.some(
+        (relation) =>
+          relation.target === pendingRelation.target && relation.label === pendingRelation.label,
+      )
+    )
+      field('relations', [...draft.relations, pendingRelation]);
+    setTarget('');
+  }
+  const saveStatus = problem ? (
+    <div className="draft-status" role="alert">
+      {problem.message}
+      <button type="button" className="text-button" onClick={() => onRetry(problem.conflict)}>
+        {problem.conflict ? 'Keep my edits' : 'Retry'}
+      </button>
+      {problem.conflict && (
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => {
+            setTagText(undefined);
+            onUseSaved();
+          }}
+        >
+          Use saved version
+        </button>
+      )}
+    </div>
+  ) : (
+    <small className="draft-status" role="status">
+      {saving ? 'Saving…' : 'Changes saved'}
+    </small>
+  );
   return (
     <aside className="inspector">
       <div className="inspector-heading">
@@ -396,7 +386,13 @@ function Inspector({
           <X size={18} />
         </button>
       </div>
-      <form onSubmit={save} id="item-details-form">
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (pendingRelation) addRelation();
+          else onRetry();
+        }}
+      >
         {item.kind !== 'note' && (
           <div className="preview">
             <Preview item={item} />
@@ -471,7 +467,8 @@ function Inspector({
             <input
               aria-label="Tags"
               value={tags}
-              onChange={(e) => setTags(e.target.value)}
+              onChange={(e) => editTags(e.target.value)}
+              onBlur={() => setTagText(undefined)}
               placeholder="Add tags, separated by commas"
             />
           </label>
@@ -490,7 +487,7 @@ function Inspector({
                 key={tag}
                 aria-label={`Remove tag ${tag}`}
                 onClick={() =>
-                  setTags(
+                  editTags(
                     tags
                       .split(',')
                       .map((t) => t.trim())
@@ -621,15 +618,11 @@ function Inspector({
               className="icon-button bordered"
               aria-label="Add relation"
               disabled={!pendingRelation}
-              onClick={() => {
-                field('relations', relations);
-                setTarget('');
-              }}
+              onClick={addRelation}
             >
               <Plus size={16} />
             </button>
           </div>
-          {pendingRelation && <small>Save changes to link the selected item.</small>}
         </fieldset>
         <label className="check-label">
           <input
@@ -640,9 +633,7 @@ function Inspector({
           <Star size={14} />
           Favorite
         </label>
-        <button className="primary full" disabled={busy} type="submit">
-          {busy ? <LoaderCircle size={15} /> : <Check size={15} />}Save changes
-        </button>
+        {item.kind !== 'note' && saveStatus}
       </form>
       <div className="detail-meta">
         <span>Type</span>
@@ -668,8 +659,7 @@ function Inspector({
         <button
           className="secondary"
           onClick={() => {
-            if (!dirty || window.confirm('Discard your unsaved changes and continue?'))
-              void onSave({ expectedRevision: item.revision, trashed: !item.trashed });
+            if (!saving) void onSave({ expectedRevision: item.revision, trashed: !item.trashed });
           }}
         >
           <Trash2 size={14} />
@@ -706,7 +696,7 @@ function Inspector({
             onChange={field}
             onBack={onClose}
             onOpen={onOpen}
-            busy={busy}
+            saveStatus={saveStatus}
             rendered={noteReading}
             setRendered={onNoteReadingChange}
           />,
@@ -722,14 +712,15 @@ function App() {
     [notice, setNotice] = useState('');
   const [scope, setScope] = useState('all'),
     [query, setQuery] = useState(''),
-    [kind, setKind] = useState('all'),
-    [view, setView] = useState<GalleryView | 'table' | 'graph'>('justified'),
+    [types, setTypes] = useState<TypeSelection>({}),
+    [view, setView] = useState<GalleryView | 'table' | 'graph'>('grid'),
     [selected, setSelected] = useState<string | null>(null),
     [uploading, setUploading] = useState(''),
     [renaming, setRenaming] = useState<Collection | null>(null),
     [creating, setCreating] = useState(false),
     [menu, setMenu] = useState(false);
   const [editorHost, setEditorHost] = useState<HTMLDivElement | null>(null);
+  const [imageDetail, setImageDetail] = useState(false);
   const [noteDetails, setNoteDetails] = useState(false);
   const [readingNoteId, setReadingNoteId] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState<Record<string, Dimensions & { colors?: string[] }>>(
@@ -761,6 +752,7 @@ function App() {
   const peekTimer = useRef<number | undefined>(undefined);
   const [itemMenu, setItemMenu] = useState<{ item: Item; x: number; y: number } | null>(null);
   const [imageSearch, setImageSearch] = useState<Item>();
+  const [folderMenu, setFolderMenu] = useState<{ folder: Collection; x: number; y: number }>();
   const [undo, setUndo] = useState<{ id: string; patch: ItemPatch }[]>([]);
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
     const stored = localStorage.getItem('atlas.theme');
@@ -788,8 +780,29 @@ function App() {
     media.addEventListener('change', apply);
     return () => media.removeEventListener('change', apply);
   }, [theme]);
-  const [pin, setPin] = useState(true);
-  const [dirty, setDirty] = useState(false);
+  const previousPanels = useRef({ left: true, right: true });
+  const rangeAnchor = useRef<string | null>(null);
+  const marqueeStart = useRef<{ x: number; y: number; existing: string[] } | null>(null);
+  const marqueeMoved = useRef(false);
+  const [marquee, setMarquee] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }>();
+  const [subfolderContents, setSubfolderContents] = useState<string[]>([]);
+  const autosave = useAutosave(
+    (id) => api<Item>(`/items/${id}`),
+    (id, patch) => api<Item>(`/items/${id}`, 'PATCH', patch),
+    (saved) =>
+      setLibrary((previous) => ({
+        ...previous,
+        items: previous.items.map((item) =>
+          item.id === saved.id && item.revision <= saved.revision ? saved : item,
+        ),
+      })),
+  );
+  const dirty = !!(selected && autosave.drafts[selected]);
   const [showAI, setShowAI] = useState(false);
   const [sort, setSort] = useState('newest'),
     [tileSize, setTileSize] = useState(() => Number(localStorage.getItem('atlas.tileSize')) || 162),
@@ -803,6 +816,15 @@ function App() {
       const input = (e.target as HTMLElement).closest(
         'input,textarea,select,[contenteditable="true"]',
       );
+      if ((e.metaKey || e.ctrlKey) && (e.key === '/' || e.code === 'Slash')) {
+        e.preventDefault();
+        setPanels((current) => {
+          if (!current.left && !current.right) return previousPanels.current;
+          previousPanels.current = current;
+          return { left: false, right: false };
+        });
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault();
         document.querySelector<HTMLInputElement>('[aria-label="Search library"]')?.focus();
@@ -823,19 +845,40 @@ function App() {
     window.addEventListener('keydown', handle);
     return () => window.removeEventListener('keydown', handle);
   }, [selected]);
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
   const fileInput = useRef<HTMLInputElement>(null);
+  const gallerySurface = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const region = gallerySurface.current;
+    if (!region || view === 'table' || view === 'graph') return;
+    let delta = 0;
+    let last = 0;
+    function step(event: WheelEvent) {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const time = performance.now();
+      if (time - last > 180) delta = 0;
+      last = time;
+      delta += event.deltaY;
+      if (Math.abs(delta) < 18) return;
+      const change = delta > 0 ? -10 : 10;
+      delta = 0;
+      setTileSize((size) => Math.max(105, Math.min(280, size + change)));
+    }
+    region.addEventListener('wheel', step, { passive: false });
+    return () => region.removeEventListener('wheel', step);
+  }, [scope, view]);
   const reload = async () => {
     const data = await api<LibrarySnapshot>('/library');
-    setLibrary(data);
+    setLibrary((previous) => {
+      const newer = new Map(previous.items.map((item) => [item.id, item]));
+      return {
+        ...data,
+        items: data.items.map((item) => {
+          const current = newer.get(item.id);
+          return current && current.revision > item.revision ? current : item;
+        }),
+      };
+    });
   };
   useEffect(() => {
     api('/session')
@@ -886,6 +929,7 @@ function App() {
   }, [rules, library.items, library.smartFolders]);
   const active = library.items.filter((i) => !i.trashed),
     tags = [...new Set(active.flatMap((i) => i.tags))].sort();
+  const includesByType = Object.values(types).includes('include');
   const folderTotals = useMemo(() => {
     const totals = new Map<string, { members: Set<string>; count: number }>();
     for (const folder of library.collections) {
@@ -908,11 +952,17 @@ function App() {
           if (scope === 'notes' && i.kind !== 'note') return false;
           if (scope === 'untagged' && i.tags.length) return false;
           if (scope === 'inbox' && i.collections.length) return false;
-          if (
-            scope.startsWith('collection:') &&
-            !i.collections.some((id) => folderTotals.get(scope.slice(11))?.members.has(id))
-          )
-            return false;
+          if (scope.startsWith('collection:')) {
+            const id = scope.slice(11);
+            if (
+              !i.collections.some(
+                (member) =>
+                  member === id ||
+                  (subfolderContents.includes(id) && folderTotals.get(id)?.members.has(member)),
+              )
+            )
+              return false;
+          }
           if (scope === 'recent' && !recent.includes(i.id)) return false;
           if (scope.startsWith('smart:')) {
             const folder = library.smartFolders?.find((f) => f.id === scope.slice(6));
@@ -920,11 +970,8 @@ function App() {
           }
           if (!rules.every((rule) => matchesRule(i, rule, dimensions[i.id]))) return false;
           if (scope.startsWith('tag:') && !i.tags.includes(scope.slice(4))) return false;
-          if (
-            kind !== 'all' &&
-            (kind === 'note' ? i.kind !== 'note' : !i.mime.startsWith(kind + '/'))
-          )
-            return false;
+          const type = types[fileType(i)];
+          if (type === 'exclude' || (includesByType && type !== 'include')) return false;
           return `${i.title} ${i.tags.join(' ')} ${i.description} ${i.body}`
             .toLowerCase()
             .includes(query.toLowerCase());
@@ -942,7 +989,20 @@ function App() {
                     ? a.createdAt.localeCompare(b.createdAt)
                     : b.createdAt.localeCompare(a.createdAt),
         ),
-    [library, scope, kind, query, sort, dimensions, folderTotals, recent, randomOrder, rules],
+    [
+      library,
+      scope,
+      types,
+      query,
+      sort,
+      dimensions,
+      folderTotals,
+      recent,
+      randomOrder,
+      rules,
+      subfolderContents,
+      includesByType,
+    ],
   );
   const title =
     scope === 'tags'
@@ -970,26 +1030,56 @@ function App() {
                           : (library.collections.find((c) => c.id === scope.slice(11))?.title ??
                             'Collection');
   const item = library.items.find((i) => i.id === selected);
-  const select = React.useCallback(
-    (id: string) => {
-      if (
-        id === selected ||
-        !dirty ||
-        window.confirm('Discard your unsaved changes and open another item?')
-      ) {
-        setSelected(id);
-        setRecent((ids) => [id, ...ids.filter((value) => value !== id)].slice(0, 100));
-      }
-    },
-    [dirty, selected],
-  );
+  const folder = scope.startsWith('collection:')
+    ? library.collections.find((entry) => entry.id === scope.slice(11))
+    : undefined;
+  const children = folder
+    ? library.collections.filter((entry) => entry.parentId === folder.id)
+    : [];
+  const inspectorOpen = panels.right && (!!item || !!folder || bulk.length > 0);
+  function focusTile(button: HTMLButtonElement, key: string) {
+    const tiles = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('.library-content .asset-open'),
+    );
+    const origin = button.getBoundingClientRect();
+    const x = origin.left + origin.width / 2;
+    const y = origin.top + origin.height / 2;
+    const horizontal = key === 'ArrowLeft' || key === 'ArrowRight';
+    const direction = key === 'ArrowLeft' || key === 'ArrowUp' ? -1 : 1;
+    const candidates = tiles
+      .filter((tile) => tile !== button)
+      .map((tile) => {
+        const rect = tile.getBoundingClientRect();
+        const dx = rect.left + rect.width / 2 - x;
+        const dy = rect.top + rect.height / 2 - y;
+        return {
+          tile,
+          axis: direction * (horizontal ? dx : dy),
+          cross: Math.abs(horizontal ? dy : dx),
+        };
+      })
+      .filter(({ axis }) => axis > 4)
+      .sort((a, b) => a.axis + a.cross * 2 - (b.axis + b.cross * 2));
+    candidates[0]?.tile.focus();
+  }
+  function selectRange(id: string) {
+    const keys = filtered.map((entry) => entry.id);
+    const a = keys.indexOf(rangeAnchor.current ?? selected ?? id);
+    const b = keys.indexOf(id);
+    if (b < 0) return;
+    const start = a < 0 ? b : a;
+    setBulk(keys.slice(Math.min(start, b), Math.max(start, b) + 1));
+  }
+  const select = React.useCallback((id: string) => {
+    setImageDetail(false);
+    setSelected(id);
+    setRecent((ids) => [id, ...ids.filter((value) => value !== id)].slice(0, 100));
+  }, []);
   const navigate = (value: string) => {
-    if (item?.kind === 'note') {
-      if (dirty && !window.confirm('Discard your unsaved note changes?')) return;
-      setSelected(null);
-    }
+    if (selected) void autosave.flush(selected);
+    setSelected(null);
+    setImageDetail(false);
     setBulk([]);
-    if (!pin && !dirty) setSelected(null);
     if (value === 'random') {
       const ids = active.map((i) => i.id);
       for (let index = ids.length - 1; index > 0; index--) {
@@ -998,19 +1088,14 @@ function App() {
       }
       setRandomOrder(ids);
     }
-    if (
-      value === 'tags' &&
-      item?.kind !== 'note' &&
-      dirty &&
-      !window.confirm('Discard your unsaved changes?')
-    )
-      return;
-    if (value === 'tags') setSelected(null);
     setScope(value);
     setMenu(false);
   };
   async function applyBulk(changes: { id: string; patch: ItemPatch }[]) {
-    if (dirty && !window.confirm('Discard your unsaved changes and apply this batch?')) return;
+    if (changes.some(({ id }) => autosave.drafts[id])) {
+      setError('Let the selected items finish autosaving before updating them together.');
+      return;
+    }
     try {
       setError('');
       const updated = await api<Item[]>('/batch', 'POST', changes);
@@ -1042,7 +1127,10 @@ function App() {
     }
   }
   async function restore(revision: number) {
-    if (dirty && !window.confirm('Discard your unsaved changes and restore this revision?')) return;
+    if (dirty) {
+      setError('Finish saving this item before restoring a revision.');
+      return;
+    }
     try {
       await api(`/items/${selected}/restore`, 'POST', {
         revision,
@@ -1056,7 +1144,6 @@ function App() {
   }
   async function importFiles(files: ArrayLike<File> | null) {
     if (!files?.length || uploading) return;
-    if (dirty && !window.confirm('Discard your unsaved changes and import files?')) return;
     setError('');
     let count = 0;
     const failures: string[] = [];
@@ -1087,20 +1174,14 @@ function App() {
     else {
       if (!scope.startsWith('collection:') && scope !== 'all') setScope('all');
       setQuery('');
-      setKind('all');
+      setTypes({});
       setRules([]);
       setNotice(`${count} ${count === 1 ? 'file' : 'files'} imported`);
     }
     if (fileInput.current) fileInput.current.value = '';
   }
   async function create(kind: 'note' | 'collection', parentId?: string) {
-    if (
-      creating ||
-      (kind === 'note' &&
-        dirty &&
-        !window.confirm('Discard your unsaved changes and create a note?'))
-    )
-      return;
+    if (creating) return;
     setCreating(true);
     try {
       setError('');
@@ -1114,7 +1195,7 @@ function App() {
         setSelected(note.id);
         setNoteDetails(false);
         setScope('notes');
-        setKind('all');
+        setTypes({});
         setQuery('');
       } else {
         const collection = await api<Collection>('/collections', 'POST', { parentId });
@@ -1160,7 +1241,7 @@ function App() {
   }
   function startPeek(i: Item) {
     window.clearTimeout(peekTimer.current);
-    if (i.mime.startsWith('image/') || i.mime.startsWith('video/'))
+    if (i.kind === 'note' || i.mime.startsWith('image/') || i.mime.startsWith('video/'))
       peekTimer.current = window.setTimeout(() => setPeek(i), 360);
   }
   function stopPeek() {
@@ -1202,6 +1283,15 @@ function App() {
       {count !== undefined && <small>{count}</small>}
     </button>
   );
+  function openFolderMenu(folder: Collection, event: React.MouseEvent | React.KeyboardEvent) {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setFolderMenu({
+      folder,
+      x: 'clientX' in event ? event.clientX : rect.left,
+      y: 'clientY' in event ? event.clientY : rect.bottom,
+    });
+  }
   function renderFolderTree(parentId: string | null, depth: number): React.ReactNode {
     if (depth > 101) return null;
     const q = folderQuery.trim().toLowerCase();
@@ -1224,7 +1314,11 @@ function App() {
           <div key={c.id}>
             <div
               className="folder-row tree-row"
-              style={{ paddingInlineStart: Math.min(depth, 8) * 10 }}
+              onContextMenu={(event) => openFolderMenu(c, event)}
+              onKeyDown={(event) => {
+                if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))
+                  openFolderMenu(c, event);
+              }}
             >
               {children ? (
                 <button
@@ -1271,25 +1365,12 @@ function App() {
                     c.title ?? c.name,
                     folderTotals.get(c.id)?.count,
                   )}
-                  <button
-                    className="icon-button rename-folder"
-                    aria-label={`Add subfolder to ${c.title ?? c.name}`}
-                    disabled={creating}
-                    onClick={() => void create('collection', c.id)}
-                  >
-                    <FolderPlus size={13} />
-                  </button>
-                  <button
-                    className="icon-button rename-folder"
-                    aria-label={`Rename ${c.title ?? c.name}`}
-                    onClick={() => setRenaming({ ...c, name: c.title ?? c.name })}
-                  >
-                    <Pencil size={13} />
-                  </button>
                 </>
               )}
             </div>
-            {children && expanded && renderFolderTree(c.id, depth + 1)}
+            {children && expanded && (
+              <div className="tree-children">{renderFolderTree(c.id, depth + 1)}</div>
+            )}
           </div>
         );
       });
@@ -1299,7 +1380,7 @@ function App() {
       onKeyDown={(e) => {
         if (e.key === 'Escape' && peek) stopPeek();
       }}
-      className={`app ${panels.right ? 'has-inspector' : ''} ${panels.left ? '' : 'hide-sidebar'} ${panels.right ? '' : 'hide-inspector'} ${item?.kind === 'note' ? 'editing-note' : ''} ${noteDetails ? 'show-note-details' : ''}`}
+      className={`app ${inspectorOpen ? 'has-inspector' : ''} ${panels.left ? '' : 'hide-sidebar'} ${panels.right ? '' : 'hide-inspector'} ${item?.kind === 'note' ? 'editing-note' : ''} ${noteDetails ? 'show-note-details' : ''}`}
     >
       {menu && (
         <button
@@ -1317,10 +1398,10 @@ function App() {
             atlas<span className="brand-dot">.</span>
           </span>
         </div>
-        <LibraryPicker onError={setError} />
+        <LibraryPicker onError={setError} onRepair={viewFolderRepair} />
         <div className="nav-label">WORKSPACE</div>
         <nav aria-label="Library navigation">
-          {nav('all', Layers, 'All items', active.length)}
+          {nav('all', Layers, 'All items')}
           {nav(
             'inbox',
             Archive,
@@ -1390,16 +1471,6 @@ function App() {
             value={folderQuery}
             onChange={(e) => setFolderQuery(e.target.value)}
           />
-          <button type="button" className="text-button" onClick={viewFolderRepair}>
-            Repair Eagle folders…
-          </button>
-          <div className="storage">
-            <span className="status-dot" />
-            <div>
-              Stored on this machine
-              <small>{bytes(active.reduce((sum, i) => sum + i.size, 0))} of original content</small>
-            </div>
-          </div>
         </div>
       </aside>
       <main
@@ -1549,25 +1620,64 @@ function App() {
             <div className="note-host" ref={setEditorHost} />
           </>
         )}
-        <div className="gallery-workspace" hidden={item?.kind === 'note'}>
+        {imageDetail && item?.mime.startsWith('image/') && (
+          <ImageDetail
+            key={item.id}
+            item={item}
+            onBack={() => {
+              setImageDetail(false);
+              requestAnimationFrame(() =>
+                document
+                  .querySelector<HTMLButtonElement>(`[data-item-id="${item.id}"] .asset-open`)
+                  ?.focus(),
+              );
+            }}
+            onStep={(direction) => {
+              const images = filtered.filter((entry) => entry.mime.startsWith('image/'));
+              const index = images.findIndex((entry) => entry.id === item.id) + direction;
+              if (images[index]) setSelected(images[index].id);
+            }}
+          />
+        )}
+        <div
+          className="gallery-workspace"
+          hidden={item?.kind === 'note' || (imageDetail && !!item?.mime.startsWith('image/'))}
+        >
           <section className="workspace-heading">
             <div>
-              <span className="eyebrow">YOUR CREATIVE SPACE</span>
               <h1>
                 {title}
                 <span>{filtered.length}</span>
               </h1>
-              <p>
-                {scope === 'trash'
-                  ? 'Items stay recoverable until you restore them.'
-                  : 'A place for everything worth keeping.'}
-              </p>
             </div>
             <div className="heading-actions">
-              <button className="secondary" disabled={creating} onClick={() => void create('note')}>
-                <Plus size={16} />
-                New note
-              </button>
+              <details className="new-item-menu">
+                <summary className="secondary">
+                  <Plus size={15} /> New
+                </summary>
+                <div className="library-popover">
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={(event) => {
+                      event.currentTarget.closest('details')?.removeAttribute('open');
+                      void create('note');
+                    }}
+                  >
+                    <FileText size={14} /> New note
+                  </button>
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={(event) => {
+                      event.currentTarget.closest('details')?.removeAttribute('open');
+                      void create('collection', folder?.id);
+                    }}
+                  >
+                    <Folder size={14} /> New folder
+                  </button>
+                </div>
+              </details>
               <button
                 className="primary"
                 disabled={!!uploading}
@@ -1613,8 +1723,8 @@ function App() {
           ) : (
             <>
               <div className="toolbar">
-                <label className="search">
-                  <Search size={17} />
+                <div className="search library-search" role="search">
+                  <Search size={16} />
                   <input
                     onFocus={() => setSearching(true)}
                     onBlur={() => {
@@ -1661,26 +1771,13 @@ function App() {
                       ))}
                     </div>
                   )}
-                </label>
-                <select
-                  className="type-filter"
-                  aria-label="Filter file type"
-                  value={kind}
-                  onChange={(e) => setKind(e.target.value)}
-                >
-                  <option value="all">All types</option>
-                  <option value="image">Images</option>
-                  <option value="video">Videos</option>
-                  <option value="audio">Audio</option>
-                  <option value="note">Notes</option>
-                </select>
+                  <TypePicker items={active} selection={types} setSelection={setTypes} />
+                </div>
                 <div className="view-switch" aria-label="Library view">
                   {(
                     [
                       ['grid', Grid2X2, 'Grid'],
-                      ['justified', Rows3, 'Justified'],
-                      ['waterfall', Columns3, 'Waterfall'],
-                      ['table', Table2, 'Table'],
+                      ['table', Table2, 'List'],
                       ['graph', Network, 'Graph'],
                     ] as const
                   ).map(([value, Icon, label]) => (
@@ -1695,6 +1792,33 @@ function App() {
                       <Icon size={17} />
                     </button>
                   ))}
+                  <details className="gallery-view-options">
+                    <summary title="View options" aria-label="View options">
+                      <ChevronRight size={15} />
+                    </summary>
+                    <div className="library-popover">
+                      <button
+                        type="button"
+                        title="Justified view"
+                        onClick={(event) => {
+                          setView('justified');
+                          event.currentTarget.closest('details')?.removeAttribute('open');
+                        }}
+                      >
+                        <Rows3 size={15} /> Justified view
+                      </button>
+                      <button
+                        type="button"
+                        title="Waterfall view"
+                        onClick={(event) => {
+                          setView('waterfall');
+                          event.currentTarget.closest('details')?.removeAttribute('open');
+                        }}
+                      >
+                        <Columns3 size={15} /> Waterfall view
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </div>
               <FilterStrip
@@ -1705,7 +1829,6 @@ function App() {
                 save={() => setSmart({ name: '', match: 'all', rules })}
               />
               <div className="organize-toolbar">
-                <span>{filtered.length} items</span>
                 <label>
                   Sort{' '}
                   <select
@@ -1719,8 +1842,16 @@ function App() {
                     <option value="size">Largest first</option>
                   </select>
                 </label>
-                <label className="size-control">
-                  Thumbnail size
+                <div className="size-control">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title="Smaller thumbnails"
+                    aria-label="Smaller thumbnails"
+                    onClick={() => setTileSize((size) => Math.max(105, size - 10))}
+                  >
+                    <Minus size={14} />
+                  </button>
                   <input
                     aria-label="Thumbnail size"
                     type="range"
@@ -1730,18 +1861,16 @@ function App() {
                     value={tileSize}
                     onChange={(e) => setTileSize(Number(e.target.value))}
                   />
-                </label>
-                <button
-                  className="text-button"
-                  onClick={() => setBulk(filtered.slice(0, 500).map((i) => i.id))}
-                >
-                  Select all{filtered.length > 500 ? ' (first 500)' : ''}
-                </button>
-                {item && (
-                  <button className="text-button" onClick={() => setPreview(item.id)}>
-                    Quick preview <kbd>Space</kbd>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title="Larger thumbnails"
+                    aria-label="Larger thumbnails"
+                    onClick={() => setTileSize((size) => Math.min(280, size + 10))}
+                  >
+                    <Plus size={14} />
                   </button>
-                )}
+                </div>
               </div>
               {bulk.length > 0 && (
                 <BulkBar
@@ -1769,13 +1898,139 @@ function App() {
                   {uploading}
                 </div>
               )}
-              <section className="library-content">
+              <section
+                className="library-content"
+                ref={gallerySurface}
+                onPointerDown={(event) => {
+                  const target = event.target as HTMLElement;
+                  if (
+                    view === 'table' ||
+                    view === 'graph' ||
+                    event.button !== 0 ||
+                    event.pointerType !== 'mouse' ||
+                    target.closest('button,input,form,canvas')
+                  )
+                    return;
+                  if (target !== event.currentTarget && !target.closest('.asset-grid')) return;
+                  marqueeStart.current = {
+                    x: event.clientX,
+                    y: event.clientY,
+                    existing: event.shiftKey || event.metaKey || event.ctrlKey ? bulk : [],
+                  };
+                  marqueeMoved.current = false;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                  const start = marqueeStart.current;
+                  if (!start) return;
+                  const width = Math.abs(event.clientX - start.x);
+                  const height = Math.abs(event.clientY - start.y);
+                  if (!marqueeMoved.current && Math.max(width, height) < 6) return;
+                  marqueeMoved.current = true;
+                  const left = Math.min(event.clientX, start.x);
+                  const top = Math.min(event.clientY, start.y);
+                  setMarquee({ left, top, width, height });
+                  const inside = Array.from(
+                    event.currentTarget.querySelectorAll<HTMLElement>('[data-item-id]'),
+                  ).flatMap((tile) => {
+                    const rect = tile.querySelector('.thumbnail')?.getBoundingClientRect();
+                    return rect &&
+                      rect.left < left + width &&
+                      rect.right > left &&
+                      rect.top < top + height &&
+                      rect.bottom > top
+                      ? [tile.dataset.itemId!]
+                      : [];
+                  });
+                  setBulk([...new Set([...start.existing, ...inside])]);
+                }}
+                onLostPointerCapture={() => {
+                  marqueeStart.current = null;
+                  setMarquee(undefined);
+                }}
+                onClick={(event) => {
+                  if (marqueeMoved.current) {
+                    marqueeMoved.current = false;
+                    return;
+                  }
+                  if (event.target === event.currentTarget) {
+                    setSelected(null);
+                    setBulk([]);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  const target = event.target as HTMLElement;
+                  if (target.matches('input, select, textarea')) return;
+                  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+                    event.preventDefault();
+                    setBulk(filtered.slice(0, 500).map((entry) => entry.id));
+                    if (filtered.length > 500)
+                      setNotice('Selected the first 500 items for batch editing.');
+                  } else if (event.key === 'Escape') {
+                    setSelected(null);
+                    setBulk([]);
+                  } else if (
+                    event.key === 'Delete' ||
+                    ((event.ctrlKey || event.metaKey) && event.key === 'Backspace')
+                  ) {
+                    const ids = bulk.length
+                      ? new Set(bulk)
+                      : new Set([
+                          target.closest<HTMLElement>('[data-item-id]')?.dataset.itemId ?? selected,
+                        ]);
+                    const changes = filtered
+                      .filter((entry) => !entry.trashed && ids.has(entry.id))
+                      .map((entry) => ({
+                        id: entry.id,
+                        patch: { expectedRevision: entry.revision, trashed: true },
+                      }));
+                    if (changes.length) {
+                      event.preventDefault();
+                      void applyBulk(changes);
+                    }
+                  }
+                }}
+              >
+                {folder && children.length > 0 && (
+                  <section className="subfolder-section" aria-label="Subfolders">
+                    <header>
+                      <h2>Subfolders</h2>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={subfolderContents.includes(folder.id)}
+                          onChange={(event) =>
+                            setSubfolderContents((ids) =>
+                              event.target.checked
+                                ? [...ids, folder.id]
+                                : ids.filter((id) => id !== folder.id),
+                            )
+                          }
+                        />{' '}
+                        Show subfolder contents
+                      </label>
+                    </header>
+                    <div className="subfolder-files">
+                      {children.map((child) => (
+                        <button
+                          key={child.id}
+                          type="button"
+                          onClick={() => navigate(`collection:${child.id}`)}
+                        >
+                          <Folder size={21} />
+                          <span>{child.title ?? child.name}</span>
+                          <small>{folderTotals.get(child.id)?.count ?? 0}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 {loading ? (
                   <div className="empty-state">
                     <LoaderCircle size={28} />
                     <h2>Opening your library…</h2>
                   </div>
-                ) : !filtered.length ? (
+                ) : !filtered.length && children.length ? null : !filtered.length ? (
                   <div className="empty-state">
                     <div className="empty-icon">
                       {active.length ? <Search size={28} /> : <Layers size={32} />}
@@ -1804,6 +2059,7 @@ function App() {
                     render={(i, height) => (
                       <div
                         key={i.id}
+                        data-item-id={i.id}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           stopPeek();
@@ -1825,13 +2081,37 @@ function App() {
                         <button
                           className="asset-open"
                           onClick={(e) => {
-                            if (e.metaKey || e.ctrlKey)
+                            if (e.shiftKey) selectRange(i.id);
+                            else if (e.metaKey || e.ctrlKey) {
+                              rangeAnchor.current = i.id;
                               setBulk((ids) =>
                                 ids.includes(i.id)
                                   ? ids.filter((id) => id !== i.id)
                                   : [...ids, i.id],
                               );
-                            else select(i.id);
+                            } else {
+                              rangeAnchor.current = i.id;
+                              setBulk([]);
+                              select(i.id);
+                              setImageDetail(i.mime.startsWith('image/'));
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (
+                              ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(
+                                event.key,
+                              )
+                            ) {
+                              event.preventDefault();
+                              focusTile(event.currentTarget, event.key);
+                            } else if (
+                              event.key === 'ContextMenu' ||
+                              (event.shiftKey && event.key === 'F10')
+                            ) {
+                              event.preventDefault();
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              setItemMenu({ item: i, x: rect.left, y: rect.top });
+                            }
                           }}
                           onDoubleClick={() =>
                             i.kind === 'note' ? select(i.id) : setPreview(i.id)
@@ -1863,6 +2143,8 @@ function App() {
                             if (e.pointerType === 'mouse') startPeek(i);
                           }}
                           onPointerLeave={stopPeek}
+                          onFocus={() => startPeek(i)}
+                          onBlur={stopPeek}
                           onClick={() => {
                             stopPeek();
                             setPreview(i.id);
@@ -1870,39 +2152,30 @@ function App() {
                         >
                           <ZoomIn size={16} />
                         </button>
-                        <button
-                          type="button"
-                          className="card-actions"
-                          aria-label={`Actions for ${i.title}`}
-                          onClick={(e) => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setItemMenu({ item: i, x: rect.left, y: rect.bottom });
-                          }}
-                        >
-                          ···
-                        </button>
                       </div>
                     )}
                   />
                 ) : view === 'table' ? (
-                  <TableView items={filtered} onSelect={select} selected={selected} />
+                  <TableView
+                    items={filtered}
+                    onSelect={(id) => {
+                      select(id);
+                      setImageDetail(
+                        !!library.items.find((entry) => entry.id === id)?.mime.startsWith('image/'),
+                      );
+                    }}
+                    selected={selected}
+                    onMenu={(item, x, y) => setItemMenu({ item, x, y })}
+                  />
                 ) : (
-                  <GraphView items={filtered} onSelect={select} />
+                  <GraphView items={filtered} selected={selected} onSelect={select} />
                 )}
               </section>
-              <footer className="workspace-footer">
-                <span>
-                  {filtered.length} items <span>·</span>{' '}
-                  {bytes(filtered.reduce((n, i) => n + i.size, 0))}
-                </span>
-                <span>
-                  Local library <span>·</span> Atlas 0.5
-                </span>
-              </footer>
             </>
           )}
         </div>
       </main>
+      {marquee && <div className="gallery-marquee" style={marquee} aria-hidden="true" />}
       {showAI && (
         <div className="ai-shade" onClick={() => setShowAI(false)}>
           <div onClick={(e) => e.stopPropagation()}>
@@ -1924,18 +2197,10 @@ function App() {
           }}
         />
       )}
-      {panels.right && (bulk.length > 0 || !item || scope === 'tags') && (
+      {panels.right && (bulk.length > 0 || (!item && !!folder)) && (
         <aside className="inspector selection-inspector">
           <div className="inspector-heading">
             <span>{bulk.length ? 'SELECTION' : 'DETAILS'}</span>
-            <button
-              className="icon-button"
-              aria-label="Pin inspector"
-              aria-pressed={pin}
-              onClick={() => setPin(!pin)}
-            >
-              <Pin size={16} />
-            </button>
           </div>
           <strong>{bulk.length ? `${bulk.length} selected` : title}</strong>
           <dl>
@@ -1963,19 +2228,23 @@ function App() {
       )}
       {item && scope !== 'tags' && (bulk.length === 0 || item.kind === 'note') && (
         <Inspector
-          key={`${item.id}-${item.revision}`}
+          key={item.id}
           item={item}
           items={library.items}
           collections={library.collections}
           onClose={() => {
-            if (!dirty || window.confirm('Discard your unsaved changes and close this item?')) {
-              setSelected(null);
-              setNoteDetails(false);
-            }
+            void autosave.flush(item.id);
+            setSelected(null);
+            setNoteDetails(false);
           }}
+          draft={{ ...item, ...autosave.drafts[item.id]?.changes }}
+          saving={!!autosave.drafts[item.id]}
+          problem={autosave.problems[item.id]}
+          onEdit={(changes) => autosave.change(item, changes)}
+          onRetry={(overwrite) => void autosave.flush(item.id, overwrite)}
+          onUseSaved={() => void autosave.useSaved(item.id)}
           onSave={save}
           onRestore={restore}
-          onDirty={setDirty}
           editorHost={editorHost}
           onOpen={select}
           onColorFilter={(color) => {
@@ -1990,6 +2259,34 @@ function App() {
         />
       )}
       {peek && !preview && <HoverPeek item={peek} />}
+      {folderMenu && (
+        <ItemMenu
+          x={folderMenu.x}
+          y={folderMenu.y}
+          label="Folder actions"
+          onClose={() => setFolderMenu(undefined)}
+          actions={[
+            { label: 'New subfolder', run: () => void create('collection', folderMenu.folder.id) },
+            {
+              label: 'Rename folder',
+              run: () =>
+                setRenaming({
+                  ...folderMenu.folder,
+                  name: folderMenu.folder.title ?? folderMenu.folder.name,
+                }),
+            },
+            {
+              label: collapsed.includes(folderMenu.folder.id) ? 'Expand folder' : 'Collapse folder',
+              run: () =>
+                setCollapsed((ids) =>
+                  ids.includes(folderMenu.folder.id)
+                    ? ids.filter((id) => id !== folderMenu.folder.id)
+                    : [...ids, folderMenu.folder.id],
+                ),
+            },
+          ]}
+        />
+      )}
       {itemMenu && (
         <ItemMenu
           x={itemMenu.x}
