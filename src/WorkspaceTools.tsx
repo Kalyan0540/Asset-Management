@@ -17,6 +17,7 @@ declare global {
   interface Window {
     atlasDesktop?: {
       appearance: () => Promise<'system' | 'light' | 'dark'>;
+      onWorkspaceCommand?: (listener: (command: string) => void) => () => void;
       onCaptureSaved?: (listener: () => void) => () => void;
       readDrafts?: () => Promise<Drafts>;
       writeDrafts?: (drafts: Drafts) => Promise<void>;
@@ -299,17 +300,119 @@ export function TypePicker({
     </details>
   );
 }
+function ChoiceFilters({
+  field,
+  catalog,
+  collections,
+  tags,
+  rules,
+  setRules,
+}: {
+  field: 'tag' | 'folder';
+  catalog: Item[];
+  collections: Collection[];
+  tags: string[];
+  rules: FilterRule[];
+  setRules: (rules: FilterRule[]) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const current = rules.filter((rule) => rule.field === field);
+  const any = current.some((rule) => rule.anyWithinField);
+  const counts = new Map<string, number>();
+  const empty = field === 'tag' ? '__untagged__' : '__uncategorized__';
+  for (const item of catalog) {
+    const values = field === 'tag' ? item.tags : item.collections;
+    for (const value of values.length ? values : [empty])
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  const candidates =
+    field === 'tag'
+      ? tags.map((tag) => ({ value: tag, label: tag }))
+      : collections.map((entry) => ({ value: entry.id, label: entry.name }));
+  candidates.unshift({ value: empty, label: field === 'tag' ? 'Untagged' : 'Uncategorized' });
+  function toggle(value: string, operator: 'is' | 'is not') {
+    const next = rules.filter((rule) => !(rule.field === field && rule.value === value));
+    if (current.find((rule) => rule.value === value)?.operator !== operator)
+      next.push({ field, value, operator, anyWithinField: any });
+    setRules(next);
+  }
+  return (
+    <div className="filter-popover choice-filters">
+      <input
+        aria-label={`Find ${field === 'tag' ? 'a tag' : 'a folder'}`}
+        placeholder="Search choices…"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+      <label className="check-label">
+        <input
+          type="checkbox"
+          checked={any}
+          disabled={!current.length}
+          onChange={(event) => {
+            setRules(
+              rules.map((rule) =>
+                rule.field === field ? { ...rule, anyWithinField: event.target.checked } : rule,
+              ),
+            );
+          }}
+        />{' '}
+        Match any included
+      </label>
+      <div className="filter-options">
+        {candidates
+          .filter(({ label }) => label.toLowerCase().includes(query.trim().toLowerCase()))
+          .map(({ value, label }) => {
+            const actual = current.find((rule) => rule.value === value)?.operator;
+            return (
+              <div className="filter-option" key={value}>
+                <label>
+                  <input
+                    type="checkbox"
+                    aria-label={`Include ${label}`}
+                    checked={actual === 'is'}
+                    onChange={() => toggle(value, 'is')}
+                  />{' '}
+                  <span>{label}</span>
+                </label>
+                <small>{counts.get(value) ?? 0}</small>
+                <label>
+                  <input
+                    type="checkbox"
+                    aria-label={`Exclude ${label}`}
+                    checked={actual === 'is not'}
+                    onChange={() => toggle(value, 'is not')}
+                  />{' '}
+                  Exclude
+                </label>
+              </div>
+            );
+          })}
+      </div>
+      <button
+        className="text-button"
+        type="button"
+        onClick={() => setRules(rules.filter((rule) => rule.field !== field))}
+      >
+        Clear {fieldLabels[field]}
+      </button>
+    </div>
+  );
+}
+
 export function FilterStrip({
   rules,
   setRules,
   collections,
   tags,
+  catalog,
   save,
 }: {
   rules: FilterRule[];
   setRules: (rules: FilterRule[]) => void;
   collections: Collection[];
   tags: string[];
+  catalog: Item[];
   save: () => void;
 }) {
   const [open, setOpen] = useState<FilterRule['field'] | null>(null);
@@ -332,94 +435,164 @@ export function FilterStrip({
         if (e.key === 'Escape') setOpen(null);
       }}
     >
-      {filterFields
-        .filter((field) => field !== 'type')
-        .map((field) => (
-          <div className="filter-slot" key={field}>
-            <button
-              className="filter-button"
-              type="button"
-              aria-expanded={open === field}
-              data-active={rules.some((r) => r.field === field)}
-              onClick={() => {
-                setDraft(rules.find((r) => r.field === field) ?? newRule(field));
-                setOpen(open === field ? null : field);
-              }}
-            >
-              {fieldLabels[field]} <ChevronDown size={11} />
-            </button>
-            {open === field && (
-              <form
-                className="filter-popover"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const value = field === 'color' ? normalizeHex(draft.value) : draft.value.trim();
-                  if (value)
-                    setRules([...rules.filter((r) => r.field !== field), { ...draft, value }]);
-                  setOpen(null);
-                }}
-              >
-                <label>
-                  Condition{' '}
-                  <select
-                    aria-label="Filter operator"
-                    value={draft.operator}
-                    onChange={(e) =>
-                      setDraft({ ...draft, operator: e.target.value as FilterRule['operator'] })
-                    }
-                  >
-                    {(field === 'folder' ||
-                    field === 'rating' ||
-                    field === 'shape' ||
-                    field === 'color'
-                      ? ['is', 'is not']
-                      : ['contains', 'is', 'is not']
-                    ).map((op) => (
-                      <option key={op}>{op}</option>
-                    ))}
-                  </select>
-                </label>
-                <RuleValue
-                  rule={draft}
-                  onChange={(value) => setDraft({ ...draft, value })}
-                  collections={collections}
-                  tags={tags}
-                />
-                {field === 'color' && (
-                  <label>
-                    Color tolerance{' '}
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={draft.tolerance ?? 0}
-                      onChange={(e) => setDraft({ ...draft, tolerance: Number(e.target.value) })}
+      <details className="filter-shell">
+        <summary className="filter-button">
+          Filters <ChevronDown size={12} />
+        </summary>
+        <div className="filter-tray">
+          {filterFields
+            .filter((field) => field !== 'type')
+            .map((field) => (
+              <div className="filter-slot" key={field}>
+                <button
+                  className="filter-button"
+                  type="button"
+                  aria-expanded={open === field}
+                  data-active={rules.some((r) => r.field === field)}
+                  onClick={() => {
+                    setDraft(rules.find((r) => r.field === field) ?? newRule(field));
+                    setOpen(open === field ? null : field);
+                  }}
+                >
+                  {fieldLabels[field]} <ChevronDown size={11} />
+                </button>
+                {open === field &&
+                  (field === 'tag' || field === 'folder' ? (
+                    <ChoiceFilters
+                      field={field}
+                      catalog={catalog}
+                      collections={collections}
+                      tags={tags}
+                      rules={rules}
+                      setRules={setRules}
                     />
-                  </label>
-                )}
-                <div className="workspace-button-row">
-                  <button
-                    type="submit"
-                    className="primary"
-                    disabled={field === 'color' ? !normalizeHex(draft.value) : !draft.value.trim()}
-                  >
-                    Apply
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                      setRules(rules.filter((r) => r.field !== field));
-                      setOpen(null);
-                    }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        ))}
+                  ) : (
+                    <form
+                      className="filter-popover"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const value =
+                          field === 'color' ? normalizeHex(draft.value) : draft.value.trim();
+                        if (value)
+                          setRules([
+                            ...rules.filter((r) => r.field !== field),
+                            { ...draft, value },
+                          ]);
+                        setOpen(null);
+                      }}
+                    >
+                      <label>
+                        Condition{' '}
+                        <select
+                          aria-label="Filter operator"
+                          value={draft.operator}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              operator: e.target.value as FilterRule['operator'],
+                            })
+                          }
+                        >
+                          {(field === 'rating' || field === 'shape' || field === 'color'
+                            ? ['is', 'is not']
+                            : ['contains', 'is', 'is not']
+                          ).map((op) => (
+                            <option key={op}>{op}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <RuleValue
+                        rule={draft}
+                        onChange={(value) => setDraft({ ...draft, value })}
+                        collections={collections}
+                        tags={tags}
+                      />
+                      {field === 'color' && (
+                        <div className="filter-color-presets" aria-label="Preset colors">
+                          {[
+                            '#111111',
+                            '#ffffff',
+                            '#ef4545',
+                            '#e58937',
+                            '#e5c44d',
+                            '#43a978',
+                            '#3f81c0',
+                            '#8c55c4',
+                            '#d26e99',
+                          ].map((color) => (
+                            <button
+                              className="icon-button"
+                              type="button"
+                              key={color}
+                              title={color}
+                              aria-label={`Use ${color}`}
+                              style={{ backgroundColor: color }}
+                              onClick={() => setDraft({ ...draft, value: color })}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {field === 'color' && (
+                        <label>
+                          Color tolerance{' '}
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={draft.tolerance ?? 0}
+                            onChange={(e) =>
+                              setDraft({ ...draft, tolerance: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                      )}
+                      <div className="workspace-button-row">
+                        <button
+                          type="submit"
+                          className="primary"
+                          disabled={
+                            field === 'color' ? !normalizeHex(draft.value) : !draft.value.trim()
+                          }
+                        >
+                          Apply
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => {
+                            setRules(rules.filter((r) => r.field !== field));
+                            setOpen(null);
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </form>
+                  ))}
+              </div>
+            ))}
+        </div>
+      </details>
+      {rules.map((rule, index) => (
+        <button
+          type="button"
+          key={`${rule.field}:${rule.value}:${index}`}
+          className="filter-chip"
+          title={`Remove ${fieldLabels[rule.field]} filter`}
+          onClick={() => setRules(rules.filter((_, position) => position !== index))}
+        >
+          <span>
+            {fieldLabels[rule.field]} · {rule.operator === 'is not' ? 'Exclude ' : ''}
+            {rule.field === 'folder'
+              ? (collections.find((entry) => entry.id === rule.value)?.name ??
+                (rule.value === '__uncategorized__' ? 'Uncategorized' : rule.value))
+              : rule.value === '__untagged__'
+                ? 'Untagged'
+                : rule.value}
+          </span>
+          <X size={12} />
+        </button>
+      ))}
       {rules.length > 0 && (
         <>
           <button className="text-button" onClick={() => setRules([])}>

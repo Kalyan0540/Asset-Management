@@ -1,3 +1,13 @@
+# Atlas 0.9.0
+
+- Write with live Markdown headings and inline Atlas images. Use the caret-positioned slash menu and searchable item picker to link, embed or connect multiple items.
+- Open separate workspace tabs and view a note beside its connections. The graph keeps positions and camera while connections change and offers tag and relationship filters plus a keyboard-accessible connections list.
+- Preview folder deletion and undo it without losing originals. Searchable tag and folder filters support include and exclude choices. Resize both side panels, and find the main commands under the desktop menus.
+- Inspect color coverage, copy swatches in several formats, select a primary color, and find related colors. Export originals, notes, CSV metadata, or a resized PNG, JPEG, or WebP.
+- Use a local Ollama model for writing drafts and batch organization proposals. Review or selectively apply descriptions, folder memberships and item links. Generic MCP continues to support compatible desktop agents.
+
+[Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.9.0/docs/GETTING_STARTED.md) · [Android releases](https://github.com/Kalyan0540/Asset-Management/releases)
+
 # Atlas 0.8.0
 
 - **Atlas Capture** saves a URL, selected text, chosen images or a screenshot from Chrome into the active desktop library.

@@ -431,6 +431,17 @@ ipcMain.handle('atlas:export-originals', async (event, ids: unknown) => {
   return { count, skipped };
 });
 function menu() {
+  function command(
+    label: string,
+    id: string,
+    accelerator?: string,
+  ): Electron.MenuItemConstructorOptions {
+    return {
+      label,
+      accelerator,
+      click: () => window?.webContents.send('atlas:workspace-command', id),
+    };
+  }
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
     {
@@ -555,7 +566,48 @@ function menu() {
         process.platform === 'darwin' ? { role: 'close' } : { role: 'quit' },
       ],
     },
-    { role: 'editMenu' },
+    {
+      label: 'File',
+      submenu: [
+        command('New Markdown Note', 'new-note', 'CmdOrCtrl+N'),
+        command('New Folder', 'new-folder', 'CmdOrCtrl+Shift+N'),
+        command('New Smart Folder', 'new-smart'),
+        { type: 'separator' },
+        command('Import Files…', 'import-files', 'CmdOrCtrl+O'),
+        command('Export Selected Files…', 'export-files'),
+        command('Export Visible Metadata as CSV', 'export-csv'),
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        command('Select All Items', 'select-all'),
+        command('Focus Item Title', 'rename-item'),
+        command('Move Selected Items to Trash', 'trash'),
+      ],
+    },
+    {
+      label: 'Find',
+      submenu: [
+        command('Search Library', 'search', 'CmdOrCtrl+F'),
+        command('Filter Folders', 'filter-folders'),
+        command('Open Advanced Filters', 'filters'),
+      ],
+    },
+    {
+      label: 'Organize',
+      submenu: [
+        command('Edit Tags', 'tags'),
+        command('Edit Folder Membership', 'membership'),
+        command('Open AI Writing and Organization', 'ai'),
+      ],
+    },
     {
       label: 'Agents',
       submenu: [
@@ -611,10 +663,18 @@ function menu() {
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        command('Grid', 'grid'),
+        command('List', 'table'),
+        command('Justified', 'justified'),
+        command('Waterfall', 'waterfall'),
+        command('Graph in New Tab', 'graph-tab'),
+        { type: 'separator' },
+        command('Toggle Sidebar', 'sidebar'),
+        command('Toggle Inspector', 'inspector'),
+        command('Toggle Both Panels', 'panels', 'CmdOrCtrl+/'),
+        command('Smaller Thumbnails', 'smaller'),
+        command('Larger Thumbnails', 'larger'),
+        { type: 'separator' },
         { role: 'togglefullscreen' },
       ],
     },
@@ -649,11 +709,12 @@ function menu() {
         },
       ],
     },
+    { role: 'windowMenu' },
     {
       label: 'Help',
       submenu: [
         {
-          label: 'Getting Started',
+          label: 'Getting Started and Shortcuts',
           click: () =>
             void shell.openExternal(
               `https://github.com/Kalyan0540/Asset-Management/blob/v${app.getVersion()}/docs/GETTING_STARTED.md`,

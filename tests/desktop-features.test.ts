@@ -188,3 +188,30 @@ test('local AI proposals are persisted, require review, retain user tags and rej
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('folder removal preserves originals, rejects stale previews and restores nested memberships', () => {
+  const root = mkdtempSync(join(tmpdir(), 'atlas-remove-folder-'));
+  const db = new Library(root);
+  try {
+    const parent = db.createCollection('Research'),
+      child = db.createCollection('Typography', parent.id);
+    const elsewhere = db.createCollection('Reference');
+    const note = db.createNote({ title: 'Typeface choices' });
+    db.patch(note.id, { expectedRevision: 1, collections: [child.id, elsewhere.id] });
+    const first = db.folderRemoval(parent.id);
+    db.patch(note.id, { expectedRevision: 2, description: 'Changed after preview' });
+    assert.throws(() => db.removeFolder(parent.id, first.key, 'ui'), /changed/);
+    const { ticket } = db.removeFolder(parent.id, db.folderRemoval(parent.id).key, 'ui');
+    assert.deepEqual(db.get(note.id).collections, [elsewhere.id]);
+    assert.equal(db.get(note.id).trashed, false);
+    const revision = db.get(note.id).revision;
+    db.patch(note.id, { expectedRevision: revision, title: 'Updated after removal' });
+    db.restoreFolder(ticket, 'ui');
+    assert.equal(db.collections().find((folder) => folder.id === child.id)?.parentId, parent.id);
+    assert.deepEqual(db.get(note.id).collections, [elsewhere.id, child.id]);
+    assert.equal(db.get(note.id).title, 'Updated after removal');
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

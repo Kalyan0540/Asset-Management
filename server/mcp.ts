@@ -146,6 +146,18 @@ if (process.env.ATLAS_MCP_WRITE === '1') {
     async ({ id, patch }) => result(await api(`/api/items/${id}`, 'PATCH', patch)),
   );
   server.registerTool(
+    'propose_organization',
+    {
+      description:
+        'Queue reviewable local AI proposals for selected items using an installed Ollama model. Does not apply changes.',
+      inputSchema: {
+        items: z.array(z.string().uuid()).min(1).max(100),
+        model: z.string().min(1).max(200),
+      },
+    },
+    async (input) => result(await api('/api/ai/batch', 'POST', input)),
+  );
+  server.registerTool(
     'create_note',
     {
       description: 'Create a Markdown note in the library.',

@@ -18,6 +18,7 @@ export const patchSchema = z
     relations: z.array(relationSchema).max(500).optional(),
     body: z.string().max(1_000_000).optional(),
     favorite: z.boolean().optional(),
+    primaryColor: z.union([z.literal(''), z.string().regex(/^#[a-f0-9]{6}$/i)]).optional(),
     rating: z.number().int().min(0).max(5).optional(),
     sourceUrl: z.union([z.literal(''), z.url({ protocol: /^https?$/ })]).optional(),
     trashed: z.boolean().optional(),
@@ -37,6 +38,7 @@ export type Item = {
   body: string;
   favorite: boolean;
   rating?: number;
+  primaryColor?: string;
   sourceUrl?: string;
   importedAt?: string;
   trashed: boolean;

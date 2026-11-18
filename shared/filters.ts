@@ -7,6 +7,7 @@ export const filterRuleSchema = z
     field: z.enum(filterFields),
     operator: z.enum(['contains', 'is', 'is not']),
     value: z.string().trim().min(1).max(120),
+    anyWithinField: z.boolean().optional(),
     tolerance: z.number().int().min(0).max(100).optional(),
   })
   .strict();
@@ -47,10 +48,10 @@ export function matchesRule(item: Item, rule: FilterRule, visual?: VisualInfo) {
       values = [item.title];
       break;
     case 'tag':
-      values = item.tags;
+      values = item.tags.length ? item.tags : ['__untagged__'];
       break;
     case 'folder':
-      values = item.collections;
+      values = item.collections.length ? item.collections : ['__uncategorized__'];
       break;
     case 'type':
       values = [
@@ -79,6 +80,7 @@ export function matchesRule(item: Item, rule: FilterRule, visual?: VisualInfo) {
     case 'color': {
       const palette = Array.isArray(raw?.palettes) ? raw.palettes : [];
       values = [
+        ...(item.primaryColor ? [item.primaryColor] : []),
         ...(visual?.colors ?? []),
         ...palette.flatMap((entry) => {
           const rgb = entry?.color;
@@ -122,11 +124,28 @@ export function matchesRule(item: Item, rule: FilterRule, visual?: VisualInfo) {
   );
   return rule.operator === 'is not' ? !found : found;
 }
+export function matchesFilterSet(item: Item, rules: FilterRule[], visual?: VisualInfo) {
+  const groups = new Map<FilterRule['field'], FilterRule[]>();
+  for (const rule of rules) {
+    if (!rule.anyWithinField || rule.operator === 'is not') {
+      if (!matchesRule(item, rule, visual)) return false;
+      continue;
+    }
+    const alternatives = groups.get(rule.field) ?? [];
+    alternatives.push(rule);
+    groups.set(rule.field, alternatives);
+  }
+  return [...groups.values()].every((alternatives) =>
+    alternatives.some((rule) => matchesRule(item, rule, visual)),
+  );
+}
 export function matchesSmartFolder(
   item: Item,
   folder: Pick<SmartFolder, 'rules' | 'match'>,
   visual?: VisualInfo,
 ) {
   const predicate = (rule: FilterRule) => matchesRule(item, rule, visual);
-  return folder.match === 'any' ? folder.rules.some(predicate) : folder.rules.every(predicate);
+  return folder.match === 'any'
+    ? folder.rules.some(predicate)
+    : matchesFilterSet(item, folder.rules, visual);
 }
