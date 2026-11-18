@@ -79,6 +79,24 @@ export class Library {
     this.db.prepare('INSERT INTO collections(id,name) VALUES(?,?)').run(collection.id, name);
     return collection;
   }
+  createUntitledCollection() {
+    return this.transaction(() => {
+      const names = new Set(this.collections().map((c) => c.name));
+      let name = 'Untitled folder';
+      for (let n = 2; names.has(name); n++) name = `Untitled folder ${n}`;
+      return this.createCollection(name);
+    });
+  }
+  renameCollection(id: string, name: string) {
+    return this.transaction(() => {
+      const existing = this.db.prepare('SELECT id FROM collections WHERE name=?').get(name);
+      if (existing && existing.id !== id)
+        throw new LibraryError(409, 'A folder already uses this name.');
+      const result = this.db.prepare('UPDATE collections SET name=? WHERE id=?').run(name, id);
+      if (!result.changes) throw new LibraryError(404, 'Folder not found.');
+      return { id, name };
+    });
+  }
   private save(item: Item, action: string, actor: string) {
     this.db
       .prepare(

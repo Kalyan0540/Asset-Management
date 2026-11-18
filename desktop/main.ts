@@ -92,6 +92,7 @@ function agentConfiguration() {
     args: [join(app.isPackaged ? join(process.resourcesPath, 'agent') : __dirname, 'entry.mjs')],
     env: {
       ELECTRON_RUN_AS_NODE: '1',
+      ATLAS_MCP_WRITE: '0',
       ATLAS_CONNECTION_FILE: join(app.getPath('userData'), 'connection.json'),
     },
   };
@@ -224,6 +225,39 @@ function menu() {
     {
       label: 'Agents',
       submenu: [
+        {
+          label: 'Copy Codex MCP Setup',
+          click: () => {
+            const { command, args, env } = agentConfiguration();
+            const quoted = (value: string) => JSON.stringify(value).replace(/\u007f/g, '\\u007F');
+            clipboard.writeText(
+              [
+                '[mcp_servers.atlas]',
+                `command = ${quoted(command)}`,
+                `args = [${args.map(quoted).join(', ')}]`,
+                'default_tools_approval_mode = "prompt"',
+                '',
+                '[mcp_servers.atlas.env]',
+                ...Object.entries(env).map(([key, value]) => `${key} = ${quoted(value)}`),
+                '',
+              ].join('\n'),
+            );
+            void dialog
+              .showMessageBox(window!, {
+                type: 'info',
+                message: 'Codex configuration copied',
+                detail:
+                  'Add it to your local Codex config.toml and start a new local session. Keep Atlas open. Codex can search, read notes and view supported images.',
+                buttons: ['Done', 'Open setup guide'],
+              })
+              .then(({ response }) => {
+                if (response === 1)
+                  void shell.openExternal(
+                    `https://github.com/Kalyan0540/Asset-Management/blob/v${app.getVersion()}/docs/CODEX.md`,
+                  );
+              });
+          },
+        },
         {
           label: 'Copy Read-only MCP Configuration',
           click: () => {

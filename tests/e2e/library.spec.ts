@@ -4,7 +4,6 @@ test('bulk organization, sorting and full-screen preview work together', async (
   const title = `Bulk preview ${Date.now()}`;
   await page.getByRole('button', { name: 'New note', exact: true }).click();
   await page.getByLabel('Note title').fill(title);
-  await page.getByRole('button', { name: 'Create note', exact: true }).click();
   await page.getByLabel('Markdown content').fill('# A larger preview');
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Changes saved');
@@ -14,7 +13,8 @@ test('bulk organization, sorting and full-screen preview work together', async (
   await page.getByRole('button', { name: 'Add tag', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('1 items updated');
   await page.getByLabel('Sort items').selectOption('name');
-  await page.getByRole('button').filter({ hasText: title }).first().dblclick();
+  await page.getByRole('button', { name: `Preview ${title}`, exact: true }).focus();
+  await page.getByRole('button', { name: `Preview ${title}`, exact: true }).press('Enter');
   await expect(page.getByRole('dialog', { name: `Preview ${title}` })).toContainText(
     '# A larger preview',
   );
@@ -30,11 +30,13 @@ test('create, relate, edit, search, export, trash and restore real library items
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'All items' })).toBeVisible();
   await page.getByRole('button', { name: 'New collection', exact: true }).click();
-  await page.getByLabel('Collection name').fill(`Project ${unique}`);
-  await page.getByRole('button', { name: 'Create collection', exact: true }).click();
+  await page.getByLabel('Folder name').fill(`Project ${unique}`);
+  await page.getByLabel('Folder name').press('Enter');
+  await expect(
+    page.getByRole('button', { name: new RegExp(`Project ${unique}`) }).first(),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'New note', exact: true }).click();
   await page.getByLabel('Note title').fill(`Research ${unique}`);
-  await page.getByRole('button', { name: 'Create note', exact: true }).click();
   await page.getByLabel('Markdown content').fill('# Research\n\nLocal notes with **context**.');
   await page.getByLabel('Tags', { exact: true }).fill('research, inspiration');
   await page.getByRole('checkbox', { name: `Project ${unique}`, exact: true }).check();
@@ -82,9 +84,7 @@ test('create, relate, edit, search, export, trash and restore real library items
 test('stale browser save preserves the draft and navigation can be cancelled', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'New note', exact: true }).click();
-  const title = `Conflict ${Date.now()}`;
-  await page.getByLabel('Note title').fill(title);
-  await page.getByRole('button', { name: 'Create note', exact: true }).click();
+  const title = await page.getByLabel('Note title').inputValue();
   await page.getByLabel('Markdown content').fill('My unsaved draft');
   await page.evaluate(async (title) => {
     const library = await (await fetch('/api/library')).json();
@@ -113,9 +113,58 @@ test('phone layout supports navigation and notes without horizontal page overflo
   await expect(page.getByRole('heading', { name: /Notes/ })).toBeVisible();
   await page.getByRole('button', { name: 'New note', exact: true }).click();
   await page.getByLabel('Note title').fill('Phone note');
-  await page.getByRole('button', { name: 'Create note', exact: true }).click();
+  await page.getByLabel('Markdown content').fill('Phone draft');
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Changes saved');
   await expect(page.getByLabel('Markdown content')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+});
+
+test('image quick preview, colors, gallery layouts and linked note editing', async ({ page }) => {
+  await page.goto('/');
+  const filename = `Canvas-${Date.now()}.png`;
+  await page.getByLabel('Import files', { exact: true }).setInputFiles({
+    name: filename,
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  });
+  await expect(page.getByLabel('Image colors')).toBeVisible();
+  await page.getByRole('button', { name: 'Close details' }).click();
+  for (const view of ['Justified', 'Waterfall', 'Grid']) {
+    await page.getByRole('button', { name: `${view} view` }).click();
+    await expect(page.getByRole('button', { name: `${view} view` })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  }
+  const card = page.locator('.asset-card').filter({ hasText: filename });
+  await card.hover();
+  await card.getByRole('button', { name: `Preview ${filename}`, exact: true }).click();
+  await expect(page.getByRole('dialog', { name: `Preview ${filename}` })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await page.getByLabel('Note title').fill('Reference study');
+  const editor = page.getByLabel('Markdown content');
+  await editor.fill('/heading 2');
+  await editor.press('Enter');
+  await expect(editor).toHaveValue('## ');
+  await editor.pressSequentially('Palette');
+  await editor.press('Enter');
+  await editor.press('Enter');
+  await page.getByRole('button', { name: 'Link an item', exact: true }).click();
+  await page.getByLabel('Find Atlas item').fill(filename);
+  await page.getByLabel('Embed images').check();
+  await page.getByRole('button', { name: new RegExp(filename) }).click();
+  await expect(editor).toHaveValue(/## Palette\n\n!\[Canvas.*\]\(atlas:/);
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await page.getByRole('button', { name: 'Read', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Palette' })).toBeVisible();
+  await expect(page.getByRole('img', { name: filename })).toBeVisible();
 });

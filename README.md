@@ -2,11 +2,18 @@
 
 A local-first asset library inspired by Eagle, with Markdown notes, collections, tags, typed relations and agent access. The working interface uses a minimal dark theme. **This is an early desktop release, not the complete planned product.**
 
-Atlas 0.3 adds Eagle library import and a separate offline Android preview to the macOS/Windows app. It includes verified backups, bulk organization, large previews and reviewed local AI suggestions on desktop. The browser development interface remains available. Automatic device sync, Chrome capture and advanced knowledge-management features remain pending. Android currently supports a smaller offline feature set with manual backup transfer.
+The desktop app imports Eagle libraries and includes tags, folders, previews, a Markdown editor, backups, and local Codex access. The Android preview stores files and notes offline and supports manual backup transfer.
 
-## Download the desktop app
+## Downloads
 
-For normal use, open [Downloads](https://github.com/Kalyan0540/Asset-Management/releases) and follow the [simple installation guide](docs/GETTING_STARTED.md). Choose the DMG for your Mac chip or the Windows installer; do not download the source ZIP. No programming tools are needed for an installer. Early releases are not publisher-signed or Apple-notarized.
+| Device | Installer |
+|---|---|
+| Mac with Apple chip (M1 or newer) | [Atlas 0.4.0 for Apple chip](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.4.0/Atlas-0.4.0-mac-arm64.dmg) |
+| Mac with Intel processor | [Atlas 0.4.0 for Intel Mac](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.4.0/Atlas-0.4.0-mac-x64.dmg) |
+| Windows with Intel or AMD processor | [Atlas 0.4.0 for Windows](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.4.0/Atlas-0.4.0-win-x64.exe) |
+| Android 8.0 or newer | [Atlas Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) |
+
+See the [desktop installation guide](docs/GETTING_STARTED.md), the [Android setup guide](docs/ANDROID.md), or [all GitHub releases](https://github.com/Kalyan0540/Asset-Management/releases).
 
 The native **Library** menu creates/opens libraries, shows their location, makes verified backups and restores a backup into a separate library. Your data stays outside the installed application, so replacing the app does not replace the library.
 
@@ -37,7 +44,9 @@ To build the desktop app from source, run `npm run desktop`. To package it for y
 
 ## Use with a local agent
 
-**Installed desktop app:** choose **Agents → Copy Read-only MCP Configuration**, then paste that configuration into your agent's MCP settings. Keep Atlas open. The installed app includes its own adapter, so no Node installation or source checkout is needed. The instructions below are for source-development use.
+**Codex:** use **Agents → Copy Codex MCP Setup** and follow the [local setup guide](docs/CODEX.md).
+
+**Other local MCP apps:** choose **Agents → Copy Read-only MCP Configuration**, then paste that configuration into your agent's MCP settings. Keep Atlas open. The installed app includes its own adapter, so no Node installation or source checkout is needed. The instructions below are for source-development use.
 
 Start the library service first. Configure your MCP client to launch the adapter from this repository. Replace the absolute paths below with your installation paths; `node` must resolve to Node 24+:
 
@@ -56,7 +65,7 @@ Start the library service first. Configure your MCP client to launch the adapter
 }
 ```
 
-The adapter exposes `search_library` and `read_item`. To deliberately enable reversible metadata/note writes, add `"ATLAS_MCP_WRITE": "1"`; this also exposes `update_item` and `create_note`. Updates require the current `expectedRevision` and reject conflicts. This is a whole-library capability, not per-folder permission management. The adapter reads the local `agent-token` file; keep it private. Client configuration wrappers vary by MCP client.
+The adapter exposes `search_library`, `read_item` and `read_image`. To deliberately enable reversible metadata/note writes, add `"ATLAS_MCP_WRITE": "1"`; this also exposes `update_item` and `create_note`. Updates require the current `expectedRevision` and reject conflicts. This is a whole-library capability, not per-folder permission management. The adapter reads the local `agent-token` file; keep it private. Client configuration wrappers vary by MCP client.
 
 On Windows, use a file URL for the source-development `--import` loader argument, for example `file:///C:/Projects/Asset-Management/node_modules/tsx/dist/loader.mjs`, and normal absolute paths for the script and library directory. The desktop adapter discovers its current library and port automatically from the running app.
 

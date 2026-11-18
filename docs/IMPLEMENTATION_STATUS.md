@@ -1,6 +1,12 @@
-# Implementation status — Atlas 0.3 desktop and Android preview
+# Implementation status — Atlas 0.4 desktop and Android preview
 
 18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
+
+## New in 0.4
+
+- Quick Preview button on gallery cards, Grid/Justified/Waterfall arrangements, compact navigation, inline folder naming, and an image inspector with dimensions and copyable color swatches.
+- Center Markdown workspace with slash commands, rendered reading mode, image embeds, links to saved items and links shown in the relations graph. The editor saves Markdown source with the existing revision checks.
+- Local Codex MCP setup copied from the Agents menu. Adds note text search and bounded image reads. Hosted ChatGPT access, smart folders and automatic rules remain pending.
 
 ## New in 0.3
 

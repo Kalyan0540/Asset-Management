@@ -127,10 +127,22 @@ export function createLibraryServer(options: {
         }
         if (url.pathname === '/api/collections' && req.method === 'POST') {
           const input = z
+            .object({ name: z.string().trim().min(1).max(80).optional() })
+            .strict()
+            .parse(await body(req));
+          return json(
+            res,
+            201,
+            input.name ? library.createCollection(input.name) : library.createUntitledCollection(),
+          );
+        }
+        const collectionPath = url.pathname.match(/^\/api\/collections\/([\w-]+)$/);
+        if (collectionPath && req.method === 'PATCH') {
+          const input = z
             .object({ name: z.string().trim().min(1).max(80) })
             .strict()
             .parse(await body(req));
-          return json(res, 201, library.createCollection(input.name));
+          return json(res, 200, library.renameCollection(collectionPath[1], input.name));
         }
         if (url.pathname === '/api/notes' && req.method === 'POST')
           return json(res, 201, library.createNote(await body(req), actor));

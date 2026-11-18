@@ -237,6 +237,18 @@ test('MCP protocol client can search/read and write tools are opt-in with revisi
   const clients: Client[] = [];
   try {
     const note = f.library.createNote({ title: 'MCP fixture', body: 'A local note' });
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+      'base64',
+    );
+    const upload = await fetch(`${f.url}/api/import?name=sample.png`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${f.token}`, 'Content-Type': 'application/octet-stream' },
+      body: png,
+    });
+    assert.equal(upload.status, 201);
+    const image = await upload.json();
+
     for (const write of [false, true]) {
       const transport = new StdioClientTransport({
         command: process.execPath,
@@ -266,11 +278,17 @@ test('MCP protocol client can search/read and write tools are opt-in with revisi
       );
       const search = await client.callTool({
         name: 'search_library',
-        arguments: { query: 'MCP', limit: 10 },
+        arguments: { query: 'A local note', limit: 10 },
       });
       assert.match(JSON.stringify(search), /MCP fixture/);
       const read = await client.callTool({ name: 'read_item', arguments: { id: note.id } });
       assert.match(JSON.stringify(read), /A local note/);
+      const photo = await client.callTool({ name: 'read_image', arguments: { id: image.id } });
+      assert.deepEqual(photo.content, [
+        { type: 'image', mimeType: 'image/png', data: png.toString('base64') },
+      ]);
+      const rejected = await client.callTool({ name: 'read_image', arguments: { id: note.id } });
+      assert.equal(rejected.isError, true);
       if (write) {
         const result = await client.callTool({
           name: 'update_item',

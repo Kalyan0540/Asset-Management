@@ -4,7 +4,7 @@ An installable offline Android app for Android 8.0 or newer. This is an initial 
 
 ## Install
 
-From the Android preview's GitHub release, download `Atlas-0.3.0-android-preview.apk` on your phone and open it. Android may ask you to allow installation from the browser or Files app you are using. Allow that source for this installation, then turn that permission off again if desired. This is a test-signed preview, not a Play Store release. The signing identity is cached for development builds; it is not a durable production signing setup. Back up before any uninstall or replacement. If Android reports a signature mismatch, do not uninstall without a verified backup.
+Download [Atlas-0.3.0-android-preview.apk](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) on your phone and open it. Android may ask you to allow installation from the browser or Files app you are using. Allow that source for this installation, then turn that permission off again if desired. This is a test-signed preview, not a Play Store release. The signing identity is cached for development builds; it is not a durable production signing setup. Back up before any uninstall or replacement. If Android reports a signature mismatch, do not uninstall without a verified backup.
 
 ## Included
 

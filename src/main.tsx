@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {
   Archive,
@@ -8,7 +9,6 @@ import {
   File,
   FileText,
   Folder,
-  FolderPlus,
   Grid2X2,
   Image as ImageIcon,
   Layers,
@@ -26,6 +26,12 @@ import {
   Music,
   History,
   LoaderCircle,
+  Columns3,
+  Rows3,
+  ZoomIn,
+  Tag,
+  Pencil,
+  PanelRight,
 } from 'lucide-react';
 import cytoscape from 'cytoscape';
 import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table';
@@ -33,6 +39,9 @@ import type { Item, ItemPatch, Collection, LibrarySnapshot, HistoryEntry } from 
 import './styles.css';
 import { BulkBar, Lightbox } from './LibraryTools';
 import { AiPanel } from './AiPanel';
+import { NoteEditor, noteReferences } from './NoteEditor';
+import { Gallery, type GalleryView, type Dimensions } from './Gallery';
+import { ImageProperties } from './ImageProperties';
 
 async function api<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
   const response = await fetch('/api' + path, {
@@ -67,8 +76,21 @@ function ItemIcon({ item, size = 24 }: { item: Item; size?: number }) {
             : File;
   return <Icon size={size} />;
 }
-function Thumbnail({ item }: { item: Item }) {
-  if (item.mime.startsWith('image/')) return <img src={content(item)} alt="" loading="lazy" />;
+function Thumbnail({ item, onDimensions }: { item: Item; onDimensions: (d: Dimensions) => void }) {
+  if (item.mime.startsWith('image/'))
+    return (
+      <img
+        src={content(item)}
+        alt=""
+        loading="lazy"
+        onLoad={(e) =>
+          onDimensions({
+            width: e.currentTarget.naturalWidth,
+            height: e.currentTarget.naturalHeight,
+          })
+        }
+      />
+    );
   if (item.kind === 'note')
     return (
       <div className="note-thumbnail">
@@ -159,13 +181,19 @@ function GraphView({ items, onSelect }: { items: Item[]; onSelect: (id: string) 
       container: ref.current!,
       elements: [
         ...visible.map((i) => ({ data: { id: i.id, label: i.title, kind: i.kind } })),
-        ...visible.flatMap((i) =>
-          i.relations
+        ...visible.flatMap((i) => {
+          const references = i.kind === 'note' ? noteReferences(i.body) : [];
+          return [
+            ...i.relations,
+            ...references
+              .filter((id) => id !== i.id && !i.relations.some((r) => r.target === id))
+              .map((target) => ({ target, label: 'note link' })),
+          ]
             .filter((r) => ids.has(r.target))
             .map((r, n) => ({
               data: { id: `${i.id}-${n}`, source: i.id, target: r.target, label: r.label },
-            })),
-        ),
+            }));
+        }),
       ],
       style: [
         {
@@ -255,6 +283,8 @@ function Inspector({
   onSave,
   onRestore,
   onDirty,
+  editorHost,
+  onOpen,
 }: {
   item: Item;
   items: Item[];
@@ -263,6 +293,8 @@ function Inspector({
   onSave: (p: ItemPatch) => Promise<void>;
   onRestore: (revision: number) => Promise<void>;
   onDirty: (dirty: boolean) => void;
+  editorHost: HTMLDivElement | null;
+  onOpen: (id: string) => void;
 }) {
   const [draft, setDraft] = useState(item),
     [tags, setTags] = useState(item.tags.join(', ')),
@@ -311,12 +343,13 @@ function Inspector({
           <X size={18} />
         </button>
       </div>
-      <form onSubmit={save}>
+      <form onSubmit={save} id="item-details-form">
         {item.kind !== 'note' && (
           <div className="preview">
             <Preview item={item} />
           </div>
         )}
+        <ImageProperties item={item} />
         <div className="detail-type">
           <ItemIcon item={item} size={14} />
           {item.kind === 'note' ? 'MARKDOWN NOTE' : item.mime.split('/')[1].toUpperCase()}
@@ -332,19 +365,6 @@ function Inspector({
             onChange={(e) => field('title', e.target.value)}
           />
         </label>
-        {item.kind === 'note' && (
-          <label>
-            Markdown
-            <textarea
-              className="markdown-editor"
-              aria-label="Markdown content"
-              value={draft.body}
-              onChange={(e) => field('body', e.target.value)}
-              placeholder="# Start writing…"
-              spellCheck={false}
-            />
-          </label>
-        )}
         <label>
           Description
           <textarea
@@ -465,8 +485,10 @@ function Inspector({
       <div className="detail-meta">
         <span>Size</span>
         <span>{bytes(item.size)}</span>
-        <span>Added</span>
+        <span>Created</span>
         <span>{new Date(item.createdAt).toLocaleDateString()}</span>
+        <span>Modified</span>
+        <span>{new Date(item.updatedAt).toLocaleDateString()}</span>
         <span>Item ID</span>
         <code title={item.id}>{item.id.slice(0, 12)}…</code>
       </div>
@@ -507,6 +529,19 @@ function Inspector({
           </div>
         ))}
       </details>
+      {item.kind === 'note' &&
+        editorHost &&
+        createPortal(
+          <NoteEditor
+            item={draft}
+            items={items}
+            onChange={field}
+            onBack={onClose}
+            onOpen={onOpen}
+            busy={busy}
+          />,
+          editorHost,
+        )}
     </aside>
   );
 }
@@ -518,12 +553,15 @@ function App() {
   const [scope, setScope] = useState('all'),
     [query, setQuery] = useState(''),
     [kind, setKind] = useState('all'),
-    [view, setView] = useState<'grid' | 'table' | 'graph'>('grid'),
+    [view, setView] = useState<GalleryView | 'table' | 'graph'>('grid'),
     [selected, setSelected] = useState<string | null>(null),
     [uploading, setUploading] = useState(''),
-    [modal, setModal] = useState<'note' | 'collection' | null>(null),
-    [name, setName] = useState(''),
+    [renaming, setRenaming] = useState<Collection | null>(null),
+    [creating, setCreating] = useState(false),
     [menu, setMenu] = useState(false);
+  const [editorHost, setEditorHost] = useState<HTMLDivElement | null>(null);
+  const [noteDetails, setNoteDetails] = useState(false);
+  const [dimensions, setDimensions] = useState<Record<string, Dimensions>>({});
   const [dirty, setDirty] = useState(false);
   const [showAI, setShowAI] = useState(false);
   const [sort, setSort] = useState('newest'),
@@ -542,7 +580,15 @@ function App() {
         e.preventDefault();
         document.querySelector<HTMLInputElement>('[aria-label="Search library"]')?.focus();
       }
-      if (!input && e.code === 'Space' && selected && !document.querySelector('[role="dialog"]')) {
+      if (
+        !input &&
+        !e.defaultPrevented &&
+        (!(e.target as HTMLElement).closest('button,a') ||
+          !!(e.target as HTMLElement).closest('.asset-open')) &&
+        e.code === 'Space' &&
+        selected &&
+        !document.querySelector('[role="dialog"]')
+      ) {
         e.preventDefault();
         setPreview(selected);
       }
@@ -559,27 +605,6 @@ function App() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
-  useEffect(() => {
-    if (!modal) return;
-    const trap = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setModal(null);
-      if (e.key !== 'Tab') return;
-      const nodes = Array.from(
-        document.querySelectorAll<HTMLElement>('[role="dialog"] button,[role="dialog"] input'),
-      );
-      const first = nodes[0],
-        last = nodes.at(-1);
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first?.focus();
-      }
-    };
-    document.addEventListener('keydown', trap);
-    return () => document.removeEventListener('keydown', trap);
-  }, [modal]);
   const fileInput = useRef<HTMLInputElement>(null);
   const reload = async () => {
     const data = await api<LibrarySnapshot>('/library');
@@ -605,6 +630,7 @@ function App() {
           if (scope === 'trash' ? !i.trashed : i.trashed) return false;
           if (scope === 'favorites' && !i.favorite) return false;
           if (scope === 'notes' && i.kind !== 'note') return false;
+          if (scope === 'untagged' && i.tags.length) return false;
           if (scope === 'inbox' && i.collections.length) return false;
           if (scope.startsWith('collection:') && !i.collections.includes(scope.slice(11)))
             return false;
@@ -636,13 +662,16 @@ function App() {
         ? 'Favorites'
         : scope === 'notes'
           ? 'Notes'
-          : scope === 'inbox'
-            ? 'Inbox'
-            : scope === 'trash'
-              ? 'Trash'
-              : scope.startsWith('tag:')
-                ? `# ${scope.slice(4)}`
-                : (library.collections.find((c) => c.id === scope.slice(11))?.name ?? 'Collection');
+          : scope === 'untagged'
+            ? 'Untagged'
+            : scope === 'inbox'
+              ? 'Uncategorized'
+              : scope === 'trash'
+                ? 'Trash'
+                : scope.startsWith('tag:')
+                  ? `# ${scope.slice(4)}`
+                  : (library.collections.find((c) => c.id === scope.slice(11))?.name ??
+                    'Collection');
   const item = library.items.find((i) => i.id === selected);
   const select = React.useCallback(
     (id: string) => {
@@ -656,6 +685,10 @@ function App() {
     [dirty, selected],
   );
   const navigate = (value: string) => {
+    if (item?.kind === 'note') {
+      if (dirty && !window.confirm('Discard your unsaved note changes?')) return;
+      setSelected(null);
+    }
     setBulk([]);
     setScope(value);
     setMenu(false);
@@ -726,27 +759,51 @@ function App() {
     else setNotice(`${count} ${count === 1 ? 'file' : 'files'} imported`);
     if (fileInput.current) fileInput.current.value = '';
   }
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
+  async function create(kind: 'note' | 'collection') {
     if (
-      modal === 'note' &&
-      dirty &&
-      !window.confirm('Discard your unsaved changes and create a note?')
+      creating ||
+      (kind === 'note' &&
+        dirty &&
+        !window.confirm('Discard your unsaved changes and create a note?'))
     )
       return;
+    setCreating(true);
     try {
       setError('');
-      if (modal === 'note') {
-        const note = await api<Item>('/notes', 'POST', { title: name, body: '' });
+      if (kind === 'note') {
+        const titles = new Set(
+          library.items.filter((i) => i.kind === 'note' && !i.trashed).map((i) => i.title),
+        );
+        let title = 'Untitled note';
+        for (let n = 2; titles.has(title); n++) title = `Untitled note ${n}`;
+        const note = await api<Item>('/notes', 'POST', { title, body: '' });
         setSelected(note.id);
+        setNoteDetails(false);
         setScope('notes');
+        setKind('all');
+        setQuery('');
       } else {
-        const collection = await api<Collection>('/collections', 'POST', { name });
+        const collection = await api<Collection>('/collections', 'POST', {});
+        setBulk([]);
         setScope(`collection:${collection.id}`);
+        if (item?.kind === 'note' && !dirty) setSelected(null);
+        setRenaming(collection);
       }
       await reload();
-      setModal(null);
-      setName('');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  }
+  async function renameFolder() {
+    if (!renaming) return;
+    const { id, name } = renaming;
+    setRenaming(null);
+    if (!name.trim() || name === library.collections.find((c) => c.id === id)?.name) return;
+    try {
+      await api(`/collections/${id}`, 'PATCH', { name });
+      await reload();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -762,7 +819,9 @@ function App() {
     </button>
   );
   return (
-    <div className={`app ${item ? 'has-inspector' : ''}`}>
+    <div
+      className={`app ${item ? 'has-inspector' : ''} ${item?.kind === 'note' ? 'editing-note' : ''} ${noteDetails ? 'show-note-details' : ''}`}
+    >
       {menu && (
         <button
           className="sidebar-shade"
@@ -778,45 +837,81 @@ function App() {
           <span>
             atlas<span className="brand-dot">.</span>
           </span>
-          <small>LOCAL LIBRARY</small>
         </div>
         <div className="library-switch">
           <div className="library-avatar">P</div>
           <div>
             <strong>Personal library</strong>
-            <small>Your ideas, connected</small>
           </div>
         </div>
         <div className="nav-label">WORKSPACE</div>
         <nav aria-label="Library navigation">
           {nav('all', Layers, 'All items', active.length)}
-          {nav('inbox', Archive, 'Inbox', active.filter((i) => !i.collections.length).length)}
+          {nav(
+            'inbox',
+            Archive,
+            'Uncategorized',
+            active.filter((i) => !i.collections.length).length,
+          )}
+          {nav('untagged', Tag, 'Untagged', active.filter((i) => !i.tags.length).length)}
+          {nav('trash', Trash2, 'Trash', library.items.filter((i) => i.trashed).length)}
           {nav('favorites', Star, 'Favorites')}
           {nav('notes', FileText, 'Notes', active.filter((i) => i.kind === 'note').length)}
         </nav>
         <div className="nav-label">
-          COLLECTIONS
+          FOLDERS
           <button
             className="icon-button"
             aria-label="New collection"
-            onClick={() => {
-              setModal('collection');
-              setName('');
-            }}
+            disabled={creating}
+            onClick={() => void create('collection')}
           >
             <Plus size={14} />
           </button>
         </div>
         <nav>
           {library.collections.map((c) => (
-            <React.Fragment key={c.id}>
-              {nav(
-                `collection:${c.id}`,
-                Folder,
-                c.name,
-                active.filter((i) => i.collections.includes(c.id)).length,
+            <div className="folder-row" key={c.id}>
+              {renaming?.id === c.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void renameFolder();
+                  }}
+                >
+                  <Folder size={17} />
+                  <input
+                    autoFocus
+                    onFocus={(e) => e.currentTarget.select()}
+                    aria-label="Folder name"
+                    maxLength={80}
+                    value={renaming.name}
+                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                    onBlur={() => void renameFolder()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setRenaming(null);
+                    }}
+                  />
+                </form>
+              ) : (
+                <>
+                  {nav(
+                    `collection:${c.id}`,
+                    Folder,
+                    c.name,
+                    active.filter((i) => i.collections.includes(c.id)).length,
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button rename-folder"
+                    aria-label={`Rename ${c.name}`}
+                    onClick={() => setRenaming(c)}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                </>
               )}
-            </React.Fragment>
+            </div>
           ))}
         </nav>
         {!library.collections.length && (
@@ -839,7 +934,6 @@ function App() {
           {!tags.length && <p className="sidebar-hint">Tags appear as you organize.</p>}
         </div>
         <div className="sidebar-bottom">
-          {nav('trash', Trash2, 'Trash', library.items.filter((i) => i.trashed).length)}
           <div className="storage">
             <span className="status-dot" />
             <div>
@@ -870,6 +964,17 @@ function App() {
             <span>{title}</span>
           </div>
           <div className="top-actions">
+            {item?.kind === 'note' && (
+              <button
+                type="button"
+                className="icon-button note-details-toggle"
+                aria-label="Toggle note details"
+                aria-pressed={noteDetails}
+                onClick={() => setNoteDetails((show) => !show)}
+              >
+                <PanelRight size={18} />
+              </button>
+            )}
             <button
               className="secondary"
               onClick={() => {
@@ -891,248 +996,295 @@ function App() {
             </span>
           </div>
         </header>
-        <section className="workspace-heading">
-          <div>
-            <span className="eyebrow">YOUR CREATIVE SPACE</span>
-            <h1>
-              {title}
-              <span>{filtered.length}</span>
-            </h1>
-            <p>
-              {scope === 'trash'
-                ? 'Items stay recoverable until you restore them.'
-                : 'A place for everything worth keeping.'}
-            </p>
-          </div>
-          <div className="heading-actions">
-            <button
-              className="secondary"
-              onClick={() => {
-                setModal('note');
-                setName('');
-              }}
-            >
-              <Plus size={16} />
-              New note
-            </button>
-            <button
-              className="primary"
-              disabled={!!uploading}
-              onClick={() => fileInput.current?.click()}
-            >
-              <Upload size={16} />
-              Import files
-            </button>
-            <input
-              type="file"
-              multiple
-              hidden
-              ref={fileInput}
-              onChange={(e) => void importFiles(e.target.files)}
-              aria-label="Import files"
-            />
-          </div>
-        </section>
-        <div className="toolbar">
-          <label className="search">
-            <Search size={17} />
-            <input
-              aria-label="Search library"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search titles, tags, and notes…"
-            />
-            <kbd>⌕</kbd>
-          </label>
-          <select
-            className="type-filter"
-            aria-label="Filter file type"
-            value={kind}
-            onChange={(e) => setKind(e.target.value)}
-          >
-            <option value="all">All types</option>
-            <option value="image">Images</option>
-            <option value="video">Videos</option>
-            <option value="audio">Audio</option>
-            <option value="note">Notes</option>
-          </select>
-          <div className="view-switch" aria-label="Library view">
-            {(
-              [
-                ['grid', Grid2X2, 'Grid'],
-                ['table', Table2, 'Table'],
-                ['graph', Network, 'Graph'],
-              ] as const
-            ).map(([value, Icon, label]) => (
-              <button
-                className={view === value ? 'active' : ''}
-                key={value}
-                aria-label={`${label} view`}
-                aria-pressed={view === value}
-                onClick={() => setView(value)}
-              >
-                <Icon size={17} />
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="organize-toolbar">
-          <span>{filtered.length} items</span>
-          <label>
-            Sort{' '}
-            <select aria-label="Sort items" value={sort} onChange={(e) => setSort(e.target.value)}>
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="name">Name A–Z</option>
-              <option value="size">Largest first</option>
-            </select>
-          </label>
-          <label className="size-control">
-            Thumbnail size
-            <input
-              aria-label="Thumbnail size"
-              type="range"
-              min="150"
-              max="280"
-              step="10"
-              value={tileSize}
-              onChange={(e) => setTileSize(Number(e.target.value))}
-            />
-          </label>
-          <button
-            className="text-button"
-            onClick={() => setBulk(filtered.slice(0, 500).map((i) => i.id))}
-          >
-            Select all{filtered.length > 500 ? ' (first 500)' : ''}
-          </button>
-          {item && (
-            <button className="text-button" onClick={() => setPreview(item.id)}>
-              Quick preview <kbd>Space</kbd>
-            </button>
-          )}
-        </div>
-        {bulk.length > 0 && (
-          <BulkBar
-            items={library.items.filter((i) => bulk.includes(i.id))}
-            collections={library.collections}
-            onApply={applyBulk}
-            onClear={() => setBulk([])}
-          />
-        )}
-        {error && (
-          <div className="alert" role="alert">
-            <span>{error}</span>
-            <button className="icon-button" aria-label="Dismiss error" onClick={() => setError('')}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
-        {uploading && (
-          <div className="upload-status" role="status">
-            <LoaderCircle size={15} />
-            {uploading}
-          </div>
-        )}
-        <section className="library-content">
-          {loading ? (
-            <div className="empty-state">
-              <LoaderCircle size={28} />
-              <h2>Opening your library…</h2>
-            </div>
-          ) : !filtered.length ? (
-            <div className="empty-state">
-              <div className="empty-icon">
-                {active.length ? <Search size={28} /> : <Layers size={32} />}
-              </div>
-              <span className="eyebrow">{active.length ? 'ROOM TO EXPLORE' : 'A FRESH START'}</span>
-              <h2>{active.length ? 'Nothing here yet' : 'Collect a little inspiration'}</h2>
-              <p>
-                {active.length
-                  ? 'Try a different search or add items to this collection.'
-                  : 'Bring in images, videos, documents, and the notes that connect them. Your originals stay on this machine.'}
-              </p>
-              <button className="primary" onClick={() => fileInput.current?.click()}>
-                <Upload size={16} />
-                Import your first files
-              </button>
-              <small>or drag files anywhere into this workspace</small>
-            </div>
-          ) : view === 'grid' ? (
-            <div
-              className="asset-grid"
-              style={{ '--tile-size': `${tileSize}px` } as React.CSSProperties}
-            >
-              {filtered.map((i) => (
-                <div
-                  key={i.id}
-                  className={`asset-card ${selected === i.id || bulk.includes(i.id) ? 'selected' : ''}`}
+        {item?.kind === 'note' && (
+          <>
+            {error && (
+              <div className="alert note-error" role="alert">
+                {error}
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Dismiss error"
+                  onClick={() => setError('')}
                 >
-                  <input
-                    className="card-checkbox"
-                    type="checkbox"
-                    aria-label={`Select ${i.title}`}
-                    checked={bulk.includes(i.id)}
-                    onChange={(e) =>
-                      setBulk((ids) =>
-                        e.target.checked ? [...ids, i.id] : ids.filter((id) => id !== i.id),
-                      )
-                    }
-                  />
-                  <button
-                    className="asset-open"
-                    onClick={(e) => {
-                      if (e.metaKey || e.ctrlKey)
-                        setBulk((ids) =>
-                          ids.includes(i.id) ? ids.filter((id) => id !== i.id) : [...ids, i.id],
-                        );
-                      else select(i.id);
-                    }}
-                    onDoubleClick={() => setPreview(i.id)}
-                  >
-                    <div className="thumbnail">
-                      <Thumbnail item={i} />
-                      {i.favorite && (
-                        <span className="favorite-indicator">
-                          <Star size={12} fill="currentColor" />
-                        </span>
-                      )}
-                      <span className="format-badge">
-                        {i.kind === 'note'
-                          ? 'MD'
-                          : i.filename.split('.').at(-1)?.slice(0, 8).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="card-caption">
-                      <strong>{i.title}</strong>
-                      <div>
-                        <span>
-                          {i.tags[0]
-                            ? `# ${i.tags[0]}`
-                            : i.kind === 'note'
-                              ? 'Markdown note'
-                              : 'Untagged'}
-                        </span>
-                        <small>{bytes(i.size)}</small>
-                      </div>
-                    </div>
-                  </button>
-                </div>
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+            <div className="note-host" ref={setEditorHost} />
+          </>
+        )}
+        <div className="gallery-workspace" hidden={item?.kind === 'note'}>
+          <section className="workspace-heading">
+            <div>
+              <span className="eyebrow">YOUR CREATIVE SPACE</span>
+              <h1>
+                {title}
+                <span>{filtered.length}</span>
+              </h1>
+              <p>
+                {scope === 'trash'
+                  ? 'Items stay recoverable until you restore them.'
+                  : 'A place for everything worth keeping.'}
+              </p>
+            </div>
+            <div className="heading-actions">
+              <button className="secondary" disabled={creating} onClick={() => void create('note')}>
+                <Plus size={16} />
+                New note
+              </button>
+              <button
+                className="primary"
+                disabled={!!uploading}
+                onClick={() => fileInput.current?.click()}
+              >
+                <Upload size={16} />
+                Import files
+              </button>
+              <input
+                type="file"
+                multiple
+                hidden
+                ref={fileInput}
+                onChange={(e) => void importFiles(e.target.files)}
+                aria-label="Import files"
+              />
+            </div>
+          </section>
+          <div className="toolbar">
+            <label className="search">
+              <Search size={17} />
+              <input
+                aria-label="Search library"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search titles, tags, and notes…"
+              />
+              <kbd>⌕</kbd>
+            </label>
+            <select
+              className="type-filter"
+              aria-label="Filter file type"
+              value={kind}
+              onChange={(e) => setKind(e.target.value)}
+            >
+              <option value="all">All types</option>
+              <option value="image">Images</option>
+              <option value="video">Videos</option>
+              <option value="audio">Audio</option>
+              <option value="note">Notes</option>
+            </select>
+            <div className="view-switch" aria-label="Library view">
+              {(
+                [
+                  ['grid', Grid2X2, 'Grid'],
+                  ['justified', Rows3, 'Justified'],
+                  ['waterfall', Columns3, 'Waterfall'],
+                  ['table', Table2, 'Table'],
+                  ['graph', Network, 'Graph'],
+                ] as const
+              ).map(([value, Icon, label]) => (
+                <button
+                  className={view === value ? 'active' : ''}
+                  key={value}
+                  title={`${label} view`}
+                  aria-label={`${label} view`}
+                  aria-pressed={view === value}
+                  onClick={() => setView(value)}
+                >
+                  <Icon size={17} />
+                </button>
               ))}
             </div>
-          ) : view === 'table' ? (
-            <TableView items={filtered} onSelect={select} selected={selected} />
-          ) : (
-            <GraphView items={filtered} onSelect={select} />
+          </div>
+          <div className="organize-toolbar">
+            <span>{filtered.length} items</span>
+            <label>
+              Sort{' '}
+              <select
+                aria-label="Sort items"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="name">Name A–Z</option>
+                <option value="size">Largest first</option>
+              </select>
+            </label>
+            <label className="size-control">
+              Thumbnail size
+              <input
+                aria-label="Thumbnail size"
+                type="range"
+                min="150"
+                max="280"
+                step="10"
+                value={tileSize}
+                onChange={(e) => setTileSize(Number(e.target.value))}
+              />
+            </label>
+            <button
+              className="text-button"
+              onClick={() => setBulk(filtered.slice(0, 500).map((i) => i.id))}
+            >
+              Select all{filtered.length > 500 ? ' (first 500)' : ''}
+            </button>
+            {item && (
+              <button className="text-button" onClick={() => setPreview(item.id)}>
+                Quick preview <kbd>Space</kbd>
+              </button>
+            )}
+          </div>
+          {bulk.length > 0 && (
+            <BulkBar
+              items={library.items.filter((i) => bulk.includes(i.id))}
+              collections={library.collections}
+              onApply={applyBulk}
+              onClear={() => setBulk([])}
+            />
           )}
-        </section>
-        <footer className="workspace-footer">
-          <span>
-            {filtered.length} items <span>·</span> {bytes(filtered.reduce((n, i) => n + i.size, 0))}
-          </span>
-          <span>
-            Personal library <span>·</span> Early release 0.3
-          </span>
-        </footer>
+          {error && (
+            <div className="alert" role="alert">
+              <span>{error}</span>
+              <button
+                className="icon-button"
+                aria-label="Dismiss error"
+                onClick={() => setError('')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+          {uploading && (
+            <div className="upload-status" role="status">
+              <LoaderCircle size={15} />
+              {uploading}
+            </div>
+          )}
+          <section className="library-content">
+            {loading ? (
+              <div className="empty-state">
+                <LoaderCircle size={28} />
+                <h2>Opening your library…</h2>
+              </div>
+            ) : !filtered.length ? (
+              <div className="empty-state">
+                <div className="empty-icon">
+                  {active.length ? <Search size={28} /> : <Layers size={32} />}
+                </div>
+                <span className="eyebrow">
+                  {active.length ? 'ROOM TO EXPLORE' : 'A FRESH START'}
+                </span>
+                <h2>{active.length ? 'Nothing here yet' : 'Collect a little inspiration'}</h2>
+                <p>
+                  {active.length
+                    ? 'Try a different search or add items to this collection.'
+                    : 'Bring in images, videos, documents, and the notes that connect them. Your originals stay on this machine.'}
+                </p>
+                <button className="primary" onClick={() => fileInput.current?.click()}>
+                  <Upload size={16} />
+                  Import your first files
+                </button>
+                <small>or drag files anywhere into this workspace</small>
+              </div>
+            ) : view !== 'table' && view !== 'graph' ? (
+              <Gallery
+                items={filtered}
+                view={view}
+                size={tileSize}
+                dimensions={dimensions}
+                render={(i, height) => (
+                  <div
+                    key={i.id}
+                    className={`asset-card ${selected === i.id || bulk.includes(i.id) ? 'selected' : ''}`}
+                  >
+                    <input
+                      className="card-checkbox"
+                      type="checkbox"
+                      aria-label={`Select ${i.title}`}
+                      checked={bulk.includes(i.id)}
+                      onChange={(e) =>
+                        setBulk((ids) =>
+                          e.target.checked ? [...ids, i.id] : ids.filter((id) => id !== i.id),
+                        )
+                      }
+                    />
+                    <button
+                      className="asset-open"
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey)
+                          setBulk((ids) =>
+                            ids.includes(i.id) ? ids.filter((id) => id !== i.id) : [...ids, i.id],
+                          );
+                        else select(i.id);
+                      }}
+                      onDoubleClick={() => (i.kind === 'note' ? select(i.id) : setPreview(i.id))}
+                    >
+                      <div className="thumbnail" style={{ height }}>
+                        <Thumbnail
+                          item={i}
+                          onDimensions={(d) =>
+                            setDimensions((map) =>
+                              map[i.id]?.width === d.width && map[i.id]?.height === d.height
+                                ? map
+                                : { ...map, [i.id]: d },
+                            )
+                          }
+                        />
+                        {i.favorite && (
+                          <span className="favorite-indicator">
+                            <Star size={12} fill="currentColor" />
+                          </span>
+                        )}
+                        <span className="format-badge">
+                          {i.kind === 'note'
+                            ? 'MD'
+                            : i.filename.split('.').at(-1)?.slice(0, 8).toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="card-caption">
+                        <strong>{i.title}</strong>
+                        <div>
+                          <span>
+                            {i.tags[0]
+                              ? `# ${i.tags[0]}`
+                              : i.kind === 'note'
+                                ? 'Markdown note'
+                                : 'Untagged'}
+                          </span>
+                          <small>{bytes(i.size)}</small>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="card-zoom"
+                      title="Quick preview"
+                      aria-label={`Preview ${i.title}`}
+                      onClick={() => setPreview(i.id)}
+                    >
+                      <ZoomIn size={16} />
+                    </button>
+                  </div>
+                )}
+              />
+            ) : view === 'table' ? (
+              <TableView items={filtered} onSelect={select} selected={selected} />
+            ) : (
+              <GraphView items={filtered} onSelect={select} />
+            )}
+          </section>
+          <footer className="workspace-footer">
+            <span>
+              {filtered.length} items <span>·</span>{' '}
+              {bytes(filtered.reduce((n, i) => n + i.size, 0))}
+            </span>
+            <span>
+              Personal library <span>·</span> Early release 0.4
+            </span>
+          </footer>
+        </div>
       </main>
       {showAI && (
         <div className="ai-shade" onClick={() => setShowAI(false)}>
@@ -1162,62 +1314,22 @@ function App() {
           items={library.items}
           collections={library.collections}
           onClose={() => {
-            if (!dirty || window.confirm('Discard your unsaved changes and close this item?'))
+            if (!dirty || window.confirm('Discard your unsaved changes and close this item?')) {
               setSelected(null);
+              setNoteDetails(false);
+            }
           }}
           onSave={save}
           onRestore={restore}
           onDirty={setDirty}
+          editorHost={editorHost}
+          onOpen={select}
         />
       )}
       {notice && (
         <div className="toast" role="status">
           <Check size={16} />
           {notice}
-        </div>
-      )}
-      {modal && (
-        <div className="modal-shade" onClick={() => setModal(null)}>
-          <form
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="modal-title"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={create}
-          >
-            <button
-              type="button"
-              className="icon-button modal-close"
-              aria-label="Close dialog"
-              onClick={() => setModal(null)}
-            >
-              <X size={18} />
-            </button>
-            {modal === 'note' ? <FileText size={26} /> : <FolderPlus size={26} />}
-            <h2 id="modal-title">
-              {modal === 'note' ? 'A new thought' : 'Make room for a collection'}
-            </h2>
-            <p>
-              {modal === 'note'
-                ? 'Write in Markdown. Connect it to anything.'
-                : 'Group references without duplicating your files.'}
-            </p>
-            <label>
-              {modal === 'note' ? 'Note title' : 'Collection name'}
-              <input
-                autoFocus
-                required
-                maxLength={modal === 'note' ? 250 : 80}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={modal === 'note' ? 'Untitled idea' : 'e.g. Brand references'}
-              />
-            </label>
-            <button className="primary full" type="submit">
-              Create {modal}
-            </button>
-          </form>
         </div>
       )}
     </div>

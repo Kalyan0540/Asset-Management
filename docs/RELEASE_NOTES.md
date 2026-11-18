@@ -1,21 +1,12 @@
-# Atlas 0.3.0 — Eagle import
+# Atlas 0.4.0
 
-You can now copy an Eagle `.library` into Atlas from **Library → Import Eagle Library…**. Close Eagle first, choose its library folder, and choose a destination. Atlas creates a separate library and leaves the Eagle source unchanged.
+- Hover over an image or video to reveal its magnifying glass. Click to open Quick Preview. Switch between Grid, Justified and Waterfall using the gallery toolbar.
+- Select an image to see its dimensions and copy dominant colors from the inspector. Imported Eagle items also show the original rating and source link when available.
+- Create folders with an inline name and notes with an automatic title. The full-width Markdown workspace includes slash commands, a formatted reading view, links to notes and assets, and image embeds. Saved links appear in the graph when both items are in view.
+- Connect local Codex through **Agents → Copy Codex MCP Setup**. Codex can search the library, read notes and access supported images without setting up Ollama.
 
-Originals are hashed and verified, tags/annotations/dates are mapped, and nested folders become collection path names. Raw Eagle metadata is preserved. An import report lists missing files and unsupported features; thumbnails are never substituted for missing originals. Imports can be cancelled. See the [Eagle import guide](https://github.com/Kalyan0540/Asset-Management/blob/v0.3.0/docs/EAGLE_IMPORT.md) for compatibility limits. Tests use synthetic fixtures; private personal libraries have not been certified.
+Download the DMG for your Mac chip or the 64-bit Windows installer under Assets. The macOS download uses ad-hoc signing and the Windows installer has no verified publisher signature. [Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.4.0/docs/GETTING_STARTED.md) · [Codex setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.4.0/docs/CODEX.md)
 
-## Downloads
+The separate Android preview supports offline files, notes, tags and manual backup transfer. [Android APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk)
 
-- Apple-chip Mac: `Atlas-0.3.0-mac-arm64.dmg`
-- Intel Mac: `Atlas-0.3.0-mac-x64.dmg`
-- Windows Intel/AMD: `Atlas-0.3.0-win-x64.exe`
-
-Open the Mac DMG and drag Atlas into Applications, or run the Windows installer. No developer tools are required. Existing Atlas libraries remain outside the application and can still be opened. [Setup guide](https://github.com/Kalyan0540/Asset-Management/blob/v0.3.0/docs/GETTING_STARTED.md).
-
-These early installers are not publisher-signed or Apple-notarized. The guide explains normal operating-system approval options without disabling protection globally.
-
-## Android
-
-A separate [Android preview](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.3.0-preview) provides an offline native library for files, notes, tags and collections. Use complete Atlas backup folders for manual transfers between desktop and Android. Import Eagle on desktop before transferring to Android. This does not merge simultaneous edits or provide automatic sync. The Android release is independently gated by its compile, lint and emulator checks.
-
-Automatic device sync, Chrome capture, richer knowledge tools, real-world migration compatibility testing, production signing and Android feature parity remain pending.
+Smart folders, automatic rules, incremental device sync and a hosted ChatGPT connection remain planned.
