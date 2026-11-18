@@ -42,6 +42,7 @@ public final class LibraryStore implements AutoCloseable {
       db.execSQL("CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY, data TEXT NOT NULL)");
       db.execSQL(
           "CREATE TABLE IF NOT EXISTS collections(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE)");
+      db.execSQL("CREATE TABLE IF NOT EXISTS removed_folders(id TEXT PRIMARY KEY,data TEXT NOT NULL)");
       db.execSQL("CREATE TABLE IF NOT EXISTS smart_folders(id TEXT PRIMARY KEY,data TEXT NOT NULL)");
       db.execSQL("CREATE TABLE IF NOT EXISTS collection_tree(id TEXT PRIMARY KEY REFERENCES collections(id) ON DELETE CASCADE,parent_id TEXT REFERENCES collections(id),title TEXT NOT NULL)");
       db.execSQL(
@@ -227,6 +228,94 @@ public final class LibraryStore implements AutoCloseable {
   synchronized JSONObject findExisting(String id) throws JSONException {
     try (Cursor cursor = db.rawQuery("SELECT data FROM items WHERE id=?", new String[]{id})) {
       return cursor.moveToFirst() ? new JSONObject(cursor.getString(0)) : null;
+    }
+  }
+
+  synchronized JSONObject previewRemoval(String key) throws Exception {
+    List<JSONObject> folders = collections();
+    LinkedHashSet<String> ids = new LinkedHashSet<>();
+    ids.add(key);
+    JSONArray branch = new JSONArray();
+    for (JSONObject folder : folders)
+      if (key.equals(folder.getString("id"))) branch.put(folder);
+    if (branch.length() == 0) throw new IOException("Folder is unavailable");
+    for (int index=0;index<branch.length();index++) {
+      String id = branch.getJSONObject(index).getString("id");
+      for (JSONObject folder : folders) {
+        if (id.equals(folder.optString("parentId")) && ids.add(folder.getString("id")))
+          branch.put(folder);
+      }
+    }
+    JSONArray memberships = new JSONArray();
+    for (JSONObject item : items()) {
+      JSONArray old = item.getJSONArray("collections"), affected = new JSONArray();
+      for (int i=0;i<old.length();i++) if (ids.contains(old.getString(i))) affected.put(old.getString(i));
+      if (affected.length() > 0) memberships.put(new JSONObject().put("id",item.getString("id"))
+          .put("revision",item.getInt("revision")).put("folders",affected));
+    }
+    return new JSONObject().put("branch",branch).put("memberships",memberships);
+  }
+
+  synchronized String removeFolder(JSONObject preview) throws Exception {
+    JSONArray branch = preview.getJSONArray("branch");
+    if (!preview.toString().equals(previewRemoval(branch.getJSONObject(0).getString("id")).toString()))
+      throw new IOException("The folder changed. Review deletion again.");
+    String ticket = UUID.randomUUID().toString();
+    db.beginTransaction();
+    try {
+      updateFolderMemberships(preview.getJSONArray("memberships"),false);
+      for (int index=branch.length()-1;index>=0;index--) {
+        String id = branch.getJSONObject(index).getString("id");
+        db.execSQL("DELETE FROM collection_tree WHERE id=?",new String[]{id});
+        db.execSQL("DELETE FROM collections WHERE id=?",new String[]{id});
+      }
+      db.execSQL("INSERT INTO removed_folders VALUES(?,?)",new String[]{ticket,preview.toString()});
+      db.setTransactionSuccessful();
+      return ticket;
+    } finally { db.endTransaction(); }
+  }
+
+  synchronized String restoreFolder(String ticket) throws Exception {
+    try (Cursor rows = db.rawQuery("SELECT data FROM removed_folders WHERE id=?",new String[]{ticket})) {
+      if (!rows.moveToFirst()) throw new IOException("Folder undo is unavailable");
+      JSONObject preview = new JSONObject(rows.getString(0));
+      JSONArray branch = preview.getJSONArray("branch");
+      Set<String> names = new HashSet<>(), ids = new HashSet<>();
+      for (JSONObject current : collections()) { names.add(current.getString("name")); ids.add(current.getString("id")); }
+      db.beginTransaction();
+      try {
+        for (int i=0;i<branch.length();i++) {
+          JSONObject folder = branch.getJSONObject(i);
+          String id = folder.getString("id"), name = folder.getString("name");
+          String parent = folder.isNull("parentId") ? null : folder.getString("parentId");
+          if (parent != null && !ids.contains(parent)) throw new IOException("Restore the parent folder first");
+          if (names.contains(name)) name += " [" + id + "]";
+          db.execSQL("INSERT INTO collections VALUES(?,?)",new Object[]{id,name});
+          db.execSQL("INSERT INTO collection_tree VALUES(?,?,?)",new Object[]{id,parent,folder.getString("title")});
+          ids.add(id);
+          names.add(name);
+        }
+        updateFolderMemberships(preview.getJSONArray("memberships"),true);
+        db.execSQL("DELETE FROM removed_folders WHERE id=?",new String[]{ticket});
+        db.setTransactionSuccessful();
+      } finally { db.endTransaction(); }
+      return branch.getJSONObject(0).getString("id");
+    }
+  }
+
+  private void updateFolderMemberships(JSONArray changes, boolean restore) throws Exception {
+    for (int i=0;i<changes.length();i++) {
+      JSONObject change = changes.getJSONObject(i);
+      JSONObject item = get(change.getString("id"));
+      LinkedHashSet<String> current = new LinkedHashSet<>();
+      JSONArray original = item.getJSONArray("collections"), affected = change.getJSONArray("folders");
+      for (int n=0;n<original.length();n++) current.add(original.getString(n));
+      for (int n=0;n<affected.length();n++)
+        if (restore) current.add(affected.getString(n)); else current.remove(affected.getString(n));
+      if (current.size() > 100) throw new IOException("An item already has too many folders");
+      item.put("collections",new JSONArray(current)).put("revision",item.getInt("revision")+1)
+          .put("updatedAt",Instant.now().toString());
+      save(item,restore ? "restore folder" : "remove folder");
     }
   }
 

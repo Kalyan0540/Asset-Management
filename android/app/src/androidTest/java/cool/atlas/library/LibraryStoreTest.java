@@ -143,6 +143,72 @@ public final class LibraryStoreTest extends InstrumentationTestCase {
     }
   }
 
+  public void testMobileModelReturnsReviewableDraftWithoutEditingNote() throws Exception {
+    File root = new File(getInstrumentation().getTargetContext().getCacheDir(), "mobile-model-" + UUID.randomUUID());
+    LibraryStore store = new LibraryStore(root);
+    java.util.concurrent.ExecutorService network = java.util.concurrent.Executors.newSingleThreadExecutor();
+    try (java.net.ServerSocket server = new java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))) {
+      server.setSoTimeout(8000);
+      java.util.concurrent.Future<?> request = network.submit(() -> {
+        try (java.net.Socket socket = server.accept()) {
+          socket.setSoTimeout(8000);
+          BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+          String method = input.readLine();
+          assertTrue(method.startsWith("POST /api/chat "));
+          String header;
+          int length = 0;
+          while ((header = input.readLine()) != null && !header.isEmpty())
+            if (header.toLowerCase(java.util.Locale.ROOT).startsWith("content-length:"))
+              length = Integer.parseInt(header.substring(header.indexOf(':') + 1).trim());
+          char[] body = new char[length];
+          int position = 0;
+          while (position < length) {
+            int read = input.read(body, position, length - position);
+            if (read == -1) break;
+            position += read;
+          }
+          assertTrue(new String(body).contains("Keep this note"));
+          byte[] response = new JSONObject().put("message", new JSONObject().put("content",
+              new JSONObject().put("draft", "Reviewed summary").toString())).toString().getBytes(StandardCharsets.UTF_8);
+          OutputStream output = socket.getOutputStream();
+          output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + response.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+          output.write(response);
+          output.flush();
+        }
+        return null;
+      });
+      JSONObject note = store.note("Fixture", "Keep this note");
+      MobileModel.Proposal result = MobileModel.generate(store, note, "http://127.0.0.1:" + server.getLocalPort(),
+          "test-model", "", "Summarize");
+      request.get(2, java.util.concurrent.TimeUnit.SECONDS);
+      assertEquals("Reviewed summary", result.draft());
+      assertEquals("Keep this note", store.get(note.getString("id")).getString("body"));
+      assertEquals(1, store.history(note.getString("id")).size());
+    } finally {
+      network.shutdownNow();
+      store.close();
+      LibraryStore.deleteTree(root);
+    }
+  }
+
+  public void testAndroidFolderUndoKeepsFileAndNestedMembership() throws Exception {
+    File root = new File(getInstrumentation().getTargetContext().getCacheDir(), "folders-" + UUID.randomUUID());
+    LibraryStore store = new LibraryStore(root);
+    try {
+      String parent = store.collection("Projects").getString("id");
+      String child = store.collection("Design", parent).getString("id");
+      JSONObject note = store.captureNote(UUID.randomUUID().toString(), "Reference", "Notes", "", new JSONArray(), child);
+      String ticket = store.removeFolder(store.previewRemoval(parent));
+      assertEquals(0, store.collections().size());
+      assertEquals(0, store.get(note.getString("id")).getJSONArray("collections").length());
+      assertEquals(parent, store.restoreFolder(ticket));
+      assertEquals(child, store.get(note.getString("id")).getJSONArray("collections").getString(0));
+    } finally {
+      store.close();
+      LibraryStore.deleteTree(root);
+    }
+  }
+
   public void testInvalidHashAndFailedCopyDoNotCreateRecords() throws Exception {
     File root =
         new File(

@@ -1,6 +1,6 @@
-# Atlas Android 0.4 preview
+# Atlas Android 0.4.1 preview
 
-Use Atlas offline on Android 8 or newer. The preview is available as an APK on GitHub. [Download Atlas for Android](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.4.0-preview)
+Use Atlas offline on Android 8 or newer. The preview is available as an APK on GitHub. [Download Atlas for Android](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.4.1-preview)
 
 ## Install or update
 
@@ -18,9 +18,13 @@ Once the browser or source app's bytes have been copied into Atlas's private cap
 
 - Switch between Grid and List. Search titles, notes and tags. Sort results or filter by actual file type, use built-in views, and browse nested folders.
 - Create simple Smart Folders for names, tags, and file types. Backups can carry saved desktop rules as well.
-- Edit notes and details with autosave and draft recovery. Notes can link to library items and display embedded images. The **Connections** list follows related items and backlinks. **Revision history** can restore a previous version.
-- Edit tags, folder memberships, ratings, descriptions and source links. Export an original or Markdown file to a location you choose.
+- Edit notes and details with autosave and draft recovery. Notes can link to library items and display embedded images. The **Connections** view shows a small interactive graph and a list of related items and backlinks. **Revision history** can restore a previous version.
+- Edit tags, folder memberships, ratings, descriptions and source links. Folder deletion has a preview and an Undo action. Export an original or Markdown file to a location you choose.
 - Use image and supported video previews on the phone. **Open original** uses a compatible app for playback or specialist formats.
+
+## Use AI writing and organization
+
+Open an item and tap **AI writing and organization**. Enter an Ollama-compatible HTTPS address and the installed model name. A service running on the phone can use localhost. Generate a writing draft or a suggestion for tags, descriptions and folders, then review what to apply. Atlas sends the selected note or image when you choose Generate. Your library tools work offline.
 
 ## Move a library manually
 

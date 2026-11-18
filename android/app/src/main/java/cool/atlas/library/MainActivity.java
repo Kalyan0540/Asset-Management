@@ -248,6 +248,11 @@ public final class MainActivity extends Activity {
 
   private void refresh() {
     if (grid == null) return;
+    for (int i=0;i<actions.getChildCount();i++) actions.getChildAt(i).setEnabled(!app.busy);
+    if (app.busy) {
+      status.setText("Working…");
+      return;
+    }
     try {
       filterIds.clear();
       filterIds.addAll(SCOPES);
@@ -264,7 +269,6 @@ public final class MainActivity extends Activity {
           new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, labels));
       int n = filterIds.indexOf(selectedFilter);
       filter.setSelection(Math.max(0, n));
-      for (int i = 0; i < actions.getChildCount(); i++) actions.getChildAt(i).setEnabled(!app.busy);
       status.setText(
           app.busy
               ? "Working… Keep Atlas open until complete."
@@ -713,7 +717,7 @@ public final class MainActivity extends Activity {
       "Back up library",
       "Restore Atlas backup",
       "Libraries on this phone",
-      "About this preview", "Retry pending captures", "New subfolder", "New Smart Folder"
+      "About this preview", "Retry pending captures", "New subfolder", "New Smart Folder", "Delete current folder"
     };
     new AlertDialog.Builder(this)
         .setTitle("Library")
@@ -786,6 +790,7 @@ public final class MainActivity extends Activity {
               if (n == 5) { if (ShareInbox.pending(app.store) == 0) message("No pending captures."); else finishCaptures(); }
               if (n == 6) newSubfolder();
               if (n == 7) newSmartFolder();
+              if (n == 8) removeFolder();
               if (n == 4)
                 message(
                     "Atlas Android 0.4 preview\n\n"
@@ -793,6 +798,36 @@ public final class MainActivity extends Activity {
                         + " or transfer a verified backup between Android and desktop.");
             })
         .show();
+  }
+
+  private void removeFolder() {
+    if (SCOPES.contains(selectedFilter) || selectedFilter.startsWith("smart:")) {
+      message("Open an ordinary folder first.");
+      return;
+    }
+    try {
+      JSONObject removal = app.store.previewRemoval(selectedFilter);
+      JSONArray branch = removal.getJSONArray("branch");
+      JSONObject root = branch.getJSONObject(0);
+      new AlertDialog.Builder(this).setTitle("Delete " + root.getString("title") + "?")
+          .setMessage((branch.length()-1) + " subfolders and " + removal.getJSONArray("memberships").length()
+              + " items are affected. Files stay in the library.")
+          .setNegativeButton("Cancel", null)
+          .setPositiveButton("Delete folder", (dialog, which) -> {
+            try {
+              String ticket = app.store.removeFolder(removal);
+              selectedFilter = "all";
+              refresh();
+              new AlertDialog.Builder(this).setTitle("Folder removed")
+                  .setNegativeButton("Done", null).setPositiveButton("Undo", (notice, button) -> {
+                    try {
+                      selectedFilter = app.store.restoreFolder(ticket);
+                      refresh();
+                    } catch (Exception failed) { error(failed); }
+                  }).show();
+            } catch (Exception failed) { error(failed); }
+          }).show();
+    } catch (Exception failed) { error(failed); }
   }
 
   private void newSmartFolder() {
@@ -856,6 +891,12 @@ public final class MainActivity extends Activity {
       fields.addView(description);
       EditText source = field("Source link", item.optString("sourceUrl"), false);
       fields.addView(source);
+      fields.addView(button("Open source link", () -> {
+        String address = source.getText().toString().trim();
+        if (!ShareInbox.webUrl(address)) { source.setError("Enter a valid source URL"); return; }
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(address))); }
+        catch (ActivityNotFoundException failed) { message("No browser could open the source link."); }
+      }));
       fields.addView(tags);
       RatingBar rating = new RatingBar(this, null, android.R.attr.ratingBarStyleSmall);
       rating.setNumStars(5);
@@ -1001,6 +1042,11 @@ public final class MainActivity extends Activity {
         save.run();
         if (persisted[0]) { dialog.dismiss(); connections(saved[0]); }
       }));
+      fields.addView(button("AI writing and organization", () -> {
+        editorHandler.removeCallbacks(save);
+        save.run();
+        if (persisted[0] && !conflict[0]) { dialog.dismiss(); aiSetup(saved[0]); }
+      }));
       fields.addView(button("Revision history", () -> {
         editorHandler.removeCallbacks(save);
         save.run();
@@ -1024,6 +1070,88 @@ public final class MainActivity extends Activity {
     } catch (Exception e) {
       error(e);
     }
+  }
+
+  private void aiSetup(JSONObject item) {
+    LinearLayout fields = new LinearLayout(this);
+    fields.setOrientation(LinearLayout.VERTICAL);
+    fields.setPadding(dp(16), 0, dp(16), dp(12));
+    fields.addView(label("Atlas sends this item to the model address you choose when you tap Generate.", 14, muted));
+    SharedPreferences config = getSharedPreferences("local-model", MODE_PRIVATE);
+    EditText address = field("Ollama server address", config.getString("address",""), false);
+    EditText model = field("Installed model name", config.getString("model",""), false);
+    EditText token = field("Access token (optional)", "", false);
+    token.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+    fields.addView(address);
+    fields.addView(model);
+    fields.addView(token);
+    String[] choices = "note".equals(item.optString("kind"))
+        ? new String[]{"Organize","Outline","Continue","Rewrite","Summarize"}
+        : new String[]{"Organize"};
+    Spinner action = new Spinner(this);
+    action.setContentDescription("AI action");
+    action.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, choices));
+    fields.addView(action);
+    new AlertDialog.Builder(this).setTitle("AI writing and organization").setView(fields)
+        .setNegativeButton("Cancel",null).setPositiveButton("Generate",(dialog, which) -> {
+          String endpoint = address.getText().toString();
+          String modelName = model.getText().toString(), access = token.getText().toString();
+          String mode = (String) action.getSelectedItem();
+          config.edit().putString("address",endpoint).putString("model",modelName).apply();
+          LibraryStore library = app.store;
+          work(() -> {
+            MobileModel.Proposal proposal = MobileModel.generate(library, item, endpoint, modelName, access, mode);
+            runOnUiThread(() -> { if (!isDestroyed() && !isFinishing()) aiReview(library, item, proposal, mode); });
+            return null;
+          });
+        }).show();
+  }
+
+  private void aiReview(LibraryStore library, JSONObject item, MobileModel.Proposal proposal, String mode) {
+    boolean organize = "Organize".equals(mode);
+    LinearLayout fields = new LinearLayout(this);
+    fields.setOrientation(LinearLayout.VERTICAL);
+    fields.setPadding(dp(16),0,dp(16),dp(12));
+    fields.addView(label(organize ? proposal.description() + "\n\nTags · " + join(proposal.tags()) : proposal.draft(), 15, Color.WHITE));
+    CheckBox description = new CheckBox(this), folders = new CheckBox(this);
+    if (organize) {
+      description.setText("Replace current description");
+      fields.addView(description);
+      if (proposal.folders().length() > 0) {
+        List<String> names = new ArrayList<>();
+        try {
+          for (JSONObject folder : library.collections())
+            if (contains(proposal.folders(),folder.getString("id"))) names.add(folder.getString("name"));
+        } catch (Exception failed) { error(failed); return; }
+        folders.setText("Add to " + String.join(", ",names));
+        fields.addView(folders);
+      }
+    }
+    ScrollView scroll = new ScrollView(this);
+    scroll.addView(fields);
+    String apply = organize ? "Apply suggestions" : "Rewrite".equals(mode) ? "Replace note body" : "Append draft";
+    new AlertDialog.Builder(this).setTitle("Review suggestion").setView(scroll).setNegativeButton("Cancel",null)
+        .setPositiveButton(apply,(dialog,which) -> {
+          try {
+            if (library != app.store) throw new IOException("Reopen the original library before applying this change.");
+            String body = item.optString("body");
+            if (!organize) body = "Rewrite".equals(mode) ? proposal.draft() : body + "\n\n" + proposal.draft();
+            JSONArray tags = combine(item.getJSONArray("tags"), organize ? proposal.tags() : new JSONArray());
+            JSONArray memberships = combine(item.getJSONArray("collections"), folders.isChecked() ? proposal.folders() : new JSONArray());
+            JSONObject saved = library.edit(item.getString("id"), item.getInt("revision"), item.getString("title"),
+                description.isChecked() ? proposal.description() : item.getString("description"),
+                body,tags,memberships,item.optBoolean("favorite"),item.optBoolean("trashed"));
+            refresh();
+            details(saved);
+          } catch (Exception failed) { error(failed); }
+        }).show();
+  }
+
+  private JSONArray combine(JSONArray first, JSONArray second) {
+    LinkedHashSet<String> combined = new LinkedHashSet<>();
+    for (JSONArray items : Arrays.asList(first, second))
+      for (int i=0;i<items.length() && combined.size()<100;i++) combined.add(items.optString(i));
+    return new JSONArray(combined);
   }
 
   private void exportItem(JSONObject item) {
@@ -1117,10 +1245,23 @@ public final class MainActivity extends Activity {
           labels.add((outgoing ? "→ " : "← ") + candidate.optString("title"));
         }
       }
-      AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Connections · " + item.optString("title"))
-          .setPositiveButton("Done", null);
-      if (found.isEmpty()) dialog.setMessage("No connected items yet.");
-      else dialog.setItems(labels.toArray(new String[0]), (view, index) -> details(found.get(index)));
+      if (found.isEmpty()) { message("No connected items yet."); return; }
+      LinearLayout connections = new LinearLayout(this);
+      connections.setOrientation(LinearLayout.VERTICAL);
+      connections.setPadding(dp(12),0,dp(12),dp(8));
+      ScrollView scroll = new ScrollView(this);
+      scroll.addView(connections);
+      AlertDialog dialog = new AlertDialog.Builder(this).setTitle(item.optString("title") + " · Connections")
+          .setView(scroll).setPositiveButton("Done",null).create();
+      ConnectionMap map = new ConnectionMap(this,item.optString("title"),labels,index -> {
+        dialog.dismiss();
+        details(found.get(index));
+      });
+      connections.addView(map,new LinearLayout.LayoutParams(-1,dp(220)));
+      for (int index=0;index<found.size();index++) {
+        JSONObject target = found.get(index);
+        connections.addView(button(labels.get(index),() -> { dialog.dismiss(); details(target); }));
+      }
       dialog.show();
     } catch (Exception failed) { error(failed); }
   }
