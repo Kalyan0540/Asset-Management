@@ -2,7 +2,12 @@
 
 18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
 
-## First workspace pass in development
+## Chrome Capture preview
+
+- The Chrome extension saves page links, selected text, chosen images and screenshots into the open desktop library. The [Chrome capture guide](CHROME_CAPTURE.md) covers pairing, preferences, the current batch and screenshot limits, and handling a blocked image.
+- The [mobile capture plan](MOBILE_CAPTURE_PLAN.md) prioritizes the Android Sharesheet and Photo Picker. A durable offline capture queue and Chrome Web Store distribution are later work.
+
+## Workspace improvements in 0.7
 
 - Note and inspector edits autosave. Recoverable desktop drafts stay in the active library's staging area. Simultaneous edits to the same field require a choice before replacing a saved version.
 - Parent folders display subfolders first. Enable **Show subfolder contents** to include descendant items. Grid and List are the main gallery layouts. Search includes file-type checkboxes and accepts normalized color values.

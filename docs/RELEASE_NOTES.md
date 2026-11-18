@@ -1,4 +1,12 @@
-# Atlas 0.7.0
+# Atlas 0.8.0
+
+- **Atlas Capture** saves a URL, selected text, chosen images or a screenshot from Chrome into the active desktop library.
+- Batch save lets you filter images by size, format and domain before choosing what to save. Right-click, drag-and-drop and optional double-click text controls provide shortcuts on the current page.
+- Pair the extension once using **Browser Capture → Copy Pairing Key** in Atlas. The extension includes default tags and system, light and dark appearance.
+
+Install desktop 0.8.0 and **Atlas-Capture-0.1.0.zip** from **Assets**. [Chrome setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.8.0/docs/CHROME_CAPTURE.md) · [Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.8.0/docs/GETTING_STARTED.md) · [Android preview](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.3.0-preview)
+
+## Atlas 0.7.0
 
 - Atlas saves note and inspector edits automatically and recovers pending desktop drafts. If two editors change the same field, you can choose which version to keep.
 - Parent folders show their subfolders first. Search has a file-type checklist. Grid and List use directional navigation, contextual actions, and range and drag selection.

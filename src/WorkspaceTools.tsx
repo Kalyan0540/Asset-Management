@@ -17,6 +17,7 @@ declare global {
   interface Window {
     atlasDesktop?: {
       appearance: () => Promise<'system' | 'light' | 'dark'>;
+      onCaptureSaved?: (listener: () => void) => () => void;
       readDrafts?: () => Promise<Drafts>;
       writeDrafts?: (drafts: Drafts) => Promise<void>;
       setAppearance: (value: 'system' | 'light' | 'dark') => Promise<void>;

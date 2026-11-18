@@ -1,0 +1,252 @@
+:root {
+  color-scheme: light;
+  --canvas: #edf3f2;
+  --surface: #fbfdfd;
+  --ink: #182b2b;
+  --muted: #526866;
+  --border: #cfdfdc;
+  --hover: #e2f0ec;
+  --accent: #126451;
+  --accent-ink: #fff;
+  --error: #91291c;
+  font:
+    14px/1.45 system-ui,
+    sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --canvas: #142322;
+    --surface: #1e3130;
+    --ink: #ecf7f5;
+    --muted: #abc3bf;
+    --border: #375753;
+    --hover: #244744;
+    --accent: #a0f1cf;
+    --accent-ink: #103d30;
+    --error: #ffc3b9;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #142322;
+  --surface: #1e3130;
+  --ink: #ecf7f5;
+  --muted: #abc3bf;
+  --border: #375753;
+  --hover: #244744;
+  --accent: #a0f1cf;
+  --accent-ink: #103d30;
+  --error: #ffc3b9;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+body.popup {
+  width: 340px;
+  padding: 12px;
+}
+body.document {
+  width: min(100%, 1120px);
+  margin: auto;
+  padding: 24px;
+}
+body.preferences {
+  max-width: 560px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+header div {
+  min-width: 0;
+  flex: 1;
+}
+header div output,
+header div small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button,
+select {
+  cursor: pointer;
+}
+button,
+input,
+select {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--ink);
+}
+button {
+  padding: 7px 10px;
+  background: var(--surface);
+}
+button:hover:not(:disabled) {
+  background: var(--hover);
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input,
+select {
+  background: var(--canvas);
+  padding: 7px 9px;
+  min-width: 0;
+}
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+.primary,
+.primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  font-weight: 650;
+}
+.subtle {
+  background: transparent;
+}
+small,
+output {
+  color: var(--muted);
+  font-size: 12px;
+}
+.actions {
+  display: grid;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  margin-block: 8px;
+}
+.actions button {
+  text-align: left;
+  border-color: transparent;
+  display: grid;
+  padding: 6px 10px;
+}
+#feedback {
+  margin: 10px 3px 0;
+  color: var(--muted);
+}
+[data-error='true'] {
+  color: var(--error) !important;
+}
+.box {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  margin-block: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+h1,
+h2,
+.box p {
+  margin: 0 0 4px;
+}
+h1 {
+  font-size: 21px;
+}
+h2 {
+  font-size: 17px;
+}
+.box label {
+  font-weight: 600;
+}
+.button-row,
+.check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.batch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 12px;
+}
+.batch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+.image-choice {
+  position: relative;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px;
+  display: grid;
+  gap: 5px;
+  cursor: pointer;
+}
+.image-choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+.image-choice img {
+  width: 100%;
+  height: 124px;
+  object-fit: contain;
+  background: var(--canvas);
+  border-radius: 6px;
+}
+.image-choice input {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+.image-choice strong,
+.image-choice small {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.batch-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-block: 12px;
+  background: var(--canvas);
+  border-top: 1px solid var(--border);
+}
+.batch-footer p {
+  flex: 1;
+  margin: 0;
+}

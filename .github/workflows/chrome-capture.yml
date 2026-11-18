@@ -1,0 +1,21 @@
+name: Check Chrome Capture
+on:
+  push:
+    paths: ['extension/**', 'server/browser-capture.ts', 'scripts/test-capture-chrome.mjs', 'shared/capture.ts', '.github/workflows/chrome-capture.yml']
+  pull_request:
+    paths: ['extension/**', 'server/browser-capture.ts', 'scripts/test-capture-chrome.mjs', 'shared/capture.ts', '.github/workflows/chrome-capture.yml']
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:capture

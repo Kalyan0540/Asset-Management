@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas Capture</title>
+    <link rel="stylesheet" href="capture.css" />
+    <script type="module" src="popup.js"></script>
+  </head>
+  <body class="popup">
+    <header>
+      <span class="mark" aria-hidden="true">A</span>
+      <div><strong>Atlas Capture</strong><output id="connection">Checking connection…</output></div>
+      <button id="preferences" type="button" class="subtle">Preferences</button>
+    </header>
+    <main aria-label="Capture actions">
+      <section class="actions" aria-label="Save from this page">
+        <button type="button" data-action="save-url">
+          <strong>Save URL</strong><small>Keep a link to this page</small>
+        </button>
+        <button type="button" data-action="review">
+          <strong>Batch save</strong><small>Review images on this page</small>
+        </button>
+      </section>
+      <section class="actions" aria-label="Screenshots">
+        <button type="button" data-action="visible">
+          <strong>Capture visible</strong><small>Take a screenshot of the viewport</small>
+        </button>
+        <button type="button" data-action="area">
+          <strong>Capture area</strong><small>Drag to select a region</small>
+        </button>
+        <button type="button" data-action="page">
+          <strong>Capture full page</strong><small>Save the scrollable page</small>
+        </button>
+      </section>
+      <section class="actions" aria-label="Page tools">
+        <button type="button" data-action="enable-drag">
+          <strong>Enable page tools</strong><small>Use drag and text tools on this tab</small>
+        </button>
+      </section>
+    </main>
+    <p id="feedback" role="status" aria-live="polite" hidden></p>
+  </body>
+</html>

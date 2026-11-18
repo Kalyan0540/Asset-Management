@@ -14,8 +14,10 @@ import { copyFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, renameSync } from 'node:fs';
 import { once } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createLibraryServer } from '../server/http.ts';
+import { createBrowserCaptureServer } from '../server/browser-capture.ts';
+import { capturePort } from '../shared/capture.ts';
 import { createBackup, restoreBackup } from '../server/backup.ts';
 import { importEagleLibrary } from '../server/eagle.ts';
 import { mergeLibraries } from '../server/merge.ts';
@@ -39,6 +41,35 @@ app.on('second-instance', () => {
   window?.focus();
 });
 const settings = () => join(app.getPath('userData'), 'preferences.json');
+const captureKeyPath = () => join(app.getPath('userData'), 'browser-capture-key');
+let captureKey: string | undefined;
+const capture = createBrowserCaptureServer(
+  () => service?.library,
+  () => captureKey,
+  () => {
+    if (window && !window.isDestroyed()) window.webContents.send('atlas:capture-saved');
+  },
+);
+function startBrowserCapture() {
+  if (existsSync(captureKeyPath())) {
+    const saved = readFileSync(captureKeyPath(), 'utf8').trim();
+    if (/^[0-9a-f]{64}$/.test(saved)) captureKey = saved;
+  }
+  capture.on('error', (error) => console.warn('Atlas Capture is unavailable.', error.message));
+  capture.listen(capturePort, '127.0.0.1');
+}
+function copyCaptureKey(reset = false) {
+  if (!capture.listening)
+    throw new Error(
+      'Atlas Capture could not open its local port. Check if another Atlas app is running.',
+    );
+  if (!captureKey || reset) {
+    const key = randomBytes(32).toString('hex');
+    writeFileSync(captureKeyPath(), key, { mode: 0o600 });
+    captureKey = key;
+  }
+  clipboard.writeText(captureKey);
+}
 function preferences(): {
   library?: string;
   recent?: unknown;
@@ -588,6 +619,37 @@ function menu() {
       ],
     },
     {
+      label: 'Browser Capture',
+      submenu: [
+        {
+          label: 'Copy Pairing Key',
+          click: () =>
+            void operation(async () => {
+              copyCaptureKey();
+              await dialog.showMessageBox(window!, {
+                message: 'Pairing key copied',
+                detail: 'Paste the key in Atlas Capture → Preferences in Chrome.',
+              });
+            }),
+        },
+        {
+          label: 'Reset Pairing Key…',
+          click: () =>
+            void operation(async () => {
+              const answer = await dialog.showMessageBox(window!, {
+                type: 'question',
+                buttons: ['Cancel', 'Reset and Copy'],
+                defaultId: 0,
+                cancelId: 0,
+                message: 'Reset the browser pairing key?',
+                detail: 'Extensions using the old key will need to pair again.',
+              });
+              if (answer.response === 1) copyCaptureKey(true);
+            }),
+        },
+      ],
+    },
+    {
       label: 'Help',
       submenu: [
         {
@@ -616,7 +678,7 @@ function menu() {
               type: 'info',
               message: `Atlas ${app.getVersion()} — early desktop release`,
               detail:
-                'Files, notes, tags, collections, relations, history and backups work locally. Device sync and the Chrome extension are still in development. Eagle import is available from the Library menu. Your files are not uploaded automatically.',
+                'Files, notes, tags, collections, relations, history and backups work locally. Use the Browser Capture menu to pair the Chrome preview. Eagle import is available from the Library menu.',
             }),
         },
       ],
@@ -636,6 +698,7 @@ app
     await openLibrary(
       process.env.ATLAS_LIBRARY ?? saved.library ?? join(app.getPath('userData'), 'Library'),
     );
+    if (!smoke) startBrowserCapture();
     window = new BrowserWindow({
       width: 1440,
       height: 940,
@@ -732,6 +795,8 @@ app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
   service?.server.close();
   service?.server.closeAllConnections();
+  capture.close();
+  capture.closeAllConnections();
 });
 app.on('will-quit', () => {
   for (const folder of imageSearchFolders) {

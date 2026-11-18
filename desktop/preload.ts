@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('atlasDesktop', {
   appearance: () => ipcRenderer.invoke('atlas:appearance'),
+  onCaptureSaved: (listener: () => void) => {
+    const notify = () => listener();
+    ipcRenderer.on('atlas:capture-saved', notify);
+    return () => ipcRenderer.removeListener('atlas:capture-saved', notify);
+  },
   readDrafts: () => ipcRenderer.invoke('atlas:read-drafts'),
   writeDrafts: (drafts: unknown) => ipcRenderer.invoke('atlas:write-drafts', drafts),
   setAppearance: (value: string) => ipcRenderer.invoke('atlas:set-appearance', value),

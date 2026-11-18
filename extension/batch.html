@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas Capture · Batch save</title>
+    <link rel="stylesheet" href="capture.css" />
+    <script type="module" src="batch.js"></script>
+  </head>
+  <body class="document batch">
+    <header>
+      <span class="mark" aria-hidden="true">A</span>
+      <div><strong>Atlas Capture</strong><small>Batch save</small></div>
+      <output id="destination"></output>
+    </header>
+    <main>
+      <h1>Choose images to save</h1>
+      <section class="batch-controls" aria-label="Image filters">
+        <input
+          id="search"
+          type="search"
+          aria-label="Find images"
+          placeholder="Find by name or domain"
+        />
+        <select id="size" aria-label="Filter by dimensions">
+          <option value="all">Any size</option>
+          <option value="large">Large · 800 px or more</option>
+          <option value="small">Under 800 px</option>
+        </select>
+        <select id="format" aria-label="Filter by file type">
+          <option value="all">Any type</option>
+        </select>
+        <select id="domain" aria-label="Filter by domain">
+          <option value="all">Any domain</option>
+        </select>
+        <button id="select" type="button" class="subtle">Select shown</button
+        ><button id="clear" type="button" class="subtle">Clear selection</button>
+      </section>
+      <div class="batch-grid" id="images"></div>
+      <p id="empty" hidden>No images match these filters.</p>
+    </main>
+    <footer class="batch-footer">
+      <label>Tags <input id="tags" placeholder="Separate with commas" maxlength="520" /></label>
+      <p id="status" role="status" aria-live="polite"></p>
+      <button id="save" class="primary" disabled>Save to Atlas</button>
+    </footer>
+  </body>
+</html>

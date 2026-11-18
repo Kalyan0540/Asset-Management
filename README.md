@@ -10,6 +10,8 @@ Open [GitHub Releases](https://github.com/Kalyan0540/Asset-Management/releases) 
 
 [Download the Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) · [Android setup](docs/ANDROID.md)
 
+Use **Atlas Capture** to save browser links, images, excerpts and screenshots to Atlas desktop. [Chrome preview setup](docs/CHROME_CAPTURE.md)
+
 The native **Library** menu opens libraries, shows their location, makes verified backups, and combines two Atlas libraries into a separate copy. The desktop gallery has a **Search web by image** action, and **All Tags** offers a preview before renaming or merging tags. Your data stays outside the installed application when you update.
 
 ## Run from source (developers)

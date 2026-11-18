@@ -9,9 +9,6 @@ import {
   statSync,
   renameSync,
   unlinkSync,
-  openSync,
-  fsyncSync,
-  closeSync,
   mkdirSync,
 } from 'node:fs';
 import { join, resolve, relative, isAbsolute, extname, basename, sep } from 'node:path';
@@ -22,6 +19,7 @@ import { z, ZodError } from 'zod';
 import { Library, LibraryError } from './library.ts';
 import { names, patchSchema } from '../shared/model.ts';
 import { LocalAI } from './ai.ts';
+import { commitStagedBlob } from './blobs.ts';
 
 const MAX_JSON = 2_000_000;
 const tagName = z.string().trim().min(1).max(80);
@@ -268,29 +266,8 @@ export function createLibraryServer(options: {
               }),
               createWriteStream(temp, { flags: 'wx', mode: 0o600 }),
             );
-            const fd = openSync(temp, 'r+');
-            try {
-              fsyncSync(fd);
-            } finally {
-              closeSync(fd);
-            }
             const digest = hash.digest('hex');
-            const destination = join(library.root, 'blobs', digest);
-            if (existsSync(destination)) unlinkSync(temp);
-            else {
-              renameSync(temp, destination);
-              // Persist the new directory entry before committing its catalog reference on POSIX.
-              // Windows durability still requires a native-platform acceptance run.
-              if (process.platform !== 'win32') {
-                const directory = openSync(join(library.root, 'blobs'), 'r');
-                try {
-                  fsyncSync(directory);
-                } finally {
-                  closeSync(directory);
-                }
-              }
-            }
-            // An interrupted operation may leave an unreferenced blob, never a catalog entry pointing at staging.
+            commitStagedBlob(library.root, temp, digest);
             const item = library.importAsset(
               {
                 filename: name,

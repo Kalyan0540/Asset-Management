@@ -61,10 +61,10 @@ F059,Android,Touch media preview tags and collections,R1,M3,F057;F022;F024;F019,
 F060,Android,Offline notes table forms and local graph,R1,M3,F057;F035;F046;F043,Changes persist offline and resolve correctly after reconnect,Proposed,0.3 Android preview partial - see ANDROID.md
 F061,Android,Native background transfer scheduler,R1,M3,F051;F058,Wi-Fi constraints retry and process death preserve queued work,P02,Planned
 F062,Android,Storage budget and cache controls,R1,M3,F053;F061,Eviction preserves pinned originals unsent captures and custom thumbnails,Proposed,Planned
-F063,Chrome,MV3 native bridge and persistent capture queue,R1,M3,F011,Worker termination or desktop outage leaves captures retryable,P04;P05,Planned
-F064,Chrome,Image link text and bookmark capture,R1,M3,F063;F012,Source URL title excerpt and selected collection arrive intact,E10,Planned
-F065,Chrome,Batch image selection filters and deduplication,R1,M3,F064;F014,Selected candidates import once with truthful success/failure counts,E10,Planned
-F066,Chrome,Visible area and region screenshot capture,R1,M3,F063,Captured region matches selection and is linked to source page,E10,Planned
+F063,Chrome,MV3 native bridge and persistent capture queue,R1,M3,F011,Worker termination or desktop outage leaves captures retryable,P04;P05,Chrome preview partial - see CHROME_CAPTURE.md
+F064,Chrome,Image link text and bookmark capture,R1,M3,F063;F012,Source URL title excerpt and selected collection arrive intact,E10,Chrome preview partial - see CHROME_CAPTURE.md
+F065,Chrome,Batch image selection filters and deduplication,R1,M3,F064;F014,Selected candidates import once with truthful success/failure counts,E10,Chrome preview partial - see CHROME_CAPTURE.md
+F066,Chrome,Visible area and region screenshot capture,R1,M3,F063,Captured region matches selection and is linked to source page,E10,Chrome preview partial - see CHROME_CAPTURE.md
 F067,AI,Built-in provider setup capabilities and secret storage,R1,M4,F011,Local and opted-in remote provider tests expose supported tasks only,E07;A03;A04,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F068,AI,Durable jobs proposals stale-result detection and undo,R1,M4,F067;F054,Retry is idempotent and changed inputs prevent silent application,Proposed,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F069,AI,Image descriptions and suggested filenames,R1,M4,F068;F022,Human text is preserved and model provenance accompanies proposals,E05,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
@@ -99,7 +99,7 @@ F097,Tables,Grouping formulas rollups boards and calendar,R2,Post-R1,F046;F041,F
 F098,Graph,Saved graph layouts clustering and canvas,R2,Post-R1,F044,Large datasets remain bounded and positions export with view metadata,O03,Planned
 F099,AI,Cross-modal text-to-image retrieval,R2,Post-R1,F073;F072,Image-content retrieval measured separately from metadata matching,Proposed,Planned
 F100,AI,Background removal upscale and erasing,R2,Post-R1,F090;F068,Outputs are explicit derivatives with model provenance and originals retained,E03,Planned
-F101,Chrome,Element full-page and higher-resolution capture,R2,Post-R1,F066;F065,Sticky elements dynamic pages and source selection have tested fallbacks,E10,Planned
+F101,Chrome,Element full-page and higher-resolution capture,R2,Post-R1,F066;F065,Sticky elements dynamic pages and source selection have tested fallbacks,E10,Chrome preview partial - see CHROME_CAPTURE.md
 F102,Browsers,Edge and Firefox packaging,R2,Post-R1,F063,Each browser passes capture queue and native-bridge installation tests,E10,Planned
 F103,Sharing,Read-only revocable gallery links,R2,Post-R1,F049;F053,Only explicitly published item set visible and revocation ends access,Proposed,Planned
 F104,Migration,Eaglepack and expanded Obsidian import,R2,Post-R1,F081;F039,Unsupported constructs reported with original payload preserved,E17;O01,Planned

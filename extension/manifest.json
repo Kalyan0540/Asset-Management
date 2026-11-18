@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Atlas Capture",
+  "version": "0.1.0",
+  "description": "Save links, images, text and screenshots into your Atlas desktop library.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1p9dqT7FXM70X+YAoLWrari5dHkbgstznxvG4UH7HPj2hASZ6PIDMStOgHvsmiurLby6+AyNmKHFlRIAJqEaiG0pxXf5rvavoLkhqahEl6iP41NLvo61MXSPKVnEwHc0Y+TDX0xLCQiZj+X3gGyPzA1RgIy2Q5CbcSaUvz7EhG/0nfObJXoYYDqdVKGAidnkZO7cV1CBAUvKJ2cs78H+NnAK3B0oIzDWr00Sr8JoC4a8RmegYtS+N+XEOH7QoBfTQWFYcyBiSSfW7I3g9n4/GvHIJKdY1VvwvukyFLEuj002EQovdrjcAhR66WDKOX70VaR1AM2vAl+BeH22Yx/FgwIDAQAB",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "scripting", "storage", "contextMenus"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Save to Atlas"
+  },
+  "options_page": "preferences.html"
+}

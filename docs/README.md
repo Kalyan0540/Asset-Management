@@ -4,6 +4,7 @@
 
 - [Published installers and setup](GETTING_STARTED.md)
 - [Android preview](ANDROID.md)
+- [Install and use Atlas Capture for Chrome](CHROME_CAPTURE.md)
 - [Import an Eagle library](EAGLE_IMPORT.md)
 - [Connect local AI assistants](CODEX.md)
 - [Release notes](RELEASE_NOTES.md)
@@ -13,6 +14,7 @@
 - [Project plan](PROJECT_PLAN.md) and [feature backlog](FEATURE_BACKLOG.csv)
 - [Workspace research](WORKSPACE_RESEARCH.md), [Eagle research](RESEARCH.md), and [open-source options](OPEN_SOURCE_OPTIONS.md)
 - [Implementation status](IMPLEMENTATION_STATUS.md)
+- [Mobile capture exploration](MOBILE_CAPTURE_PLAN.md)
 - [Original project context and continuation notes](PROJECT_CONTEXT.md)
 
 ## Engineering and delivery

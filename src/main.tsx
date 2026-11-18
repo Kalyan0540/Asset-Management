@@ -885,6 +885,9 @@ function App() {
       .then(reload)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    return window.atlasDesktop?.onCaptureSaved?.(() => {
+      void reload().catch((error) => setError(error.message));
+    });
   }, []);
   useEffect(() => {
     if (!notice) return;

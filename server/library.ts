@@ -404,8 +404,29 @@ export class Library {
       this.save({ ...this.base(title), body, size: Buffer.byteLength(body) }, 'create note', actor),
     );
   }
+  createCaptureNote({
+    title,
+    body,
+    sourceUrl,
+    tags,
+  }: Pick<Item, 'title' | 'body' | 'sourceUrl' | 'tags'>) {
+    return this.transaction(() =>
+      this.save(
+        { ...this.base(title), body, size: Buffer.byteLength(body), sourceUrl, tags },
+        'capture note',
+        'chrome-capture',
+      ),
+    );
+  }
   importAsset(
-    data: { filename: string; mime: string; size: number; hash: string },
+    data: {
+      filename: string;
+      mime: string;
+      size: number;
+      hash: string;
+      sourceUrl?: string;
+      tags?: string[];
+    },
     actor = 'ui',
     collection?: string,
   ) {
@@ -427,7 +448,10 @@ export class Library {
       this.save(item, 'import', actor);
       if (!rules.length) return item;
       const tags = [
-        ...new Set(rules.flatMap((folder) => (folder.addTag ? [folder.addTag] : []))),
+        ...new Set([
+          ...item.tags,
+          ...rules.flatMap((folder) => (folder.addTag ? [folder.addTag] : [])),
+        ]),
       ].slice(0, 100);
       const collections = [
         ...new Set([
