@@ -37,3 +37,9 @@ The user has authorized branches, implementation, commits and pushes autonomousl
 Use `npm run check` for formatting, TypeScript, production build and integration tests. `npm run test:e2e` runs browser workflows. `npm run build:desktop` bundles the native shell; native and packaged smoke tests verify UI/database, backup/restore and MCP. Desktop releases build on platform runners when a version tag is pushed, and publish only when all package jobs pass.
 
 For nontechnical usage, point to GETTING_STARTED.md and actual release installers, not source archives or terminal instructions. GitHub stores code/docs/installers; the cloud workspace is a development machine; the user's personal library remains local until synchronization is implemented.
+
+## 0.3 implementation continuation
+
+Docs/context were pushed first in commit 78f1658. Current feature branch is `feat/eagle-import-android`, with pull request https://github.com/Kalyan0540/Asset-Management/pull/1 against the baseline branch. Eagle importer lives in `server/eagle.ts` and the desktop Library menu; its integration tests cover read-only migration and recovery. Android is a native Java app in `android/`, using platform SQLite and Storage Access Framework. It shares the desktop schema and backup folder format, not the React UI or Node server. Android 8+ is the initial minimum; Android 11 emulator tests are automated. No plugin/fork code was copied from external Eagle tools.
+
+Desktop tags `v*` build platform installers; Android tags `android-v*` build/test/publish an APK preview. Android signing currently uses a cached development key, not a production key. Android has no Internet permission, auto-sync, AI/MCP, graph/table UI or durable background share queue. `scripts/transfer-fixture.ts` supplies desktop-to-Android fixtures and verifies Android-written backups on Node. Check the corresponding workflow runs before stating release/test success.

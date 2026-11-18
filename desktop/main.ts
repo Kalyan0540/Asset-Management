@@ -257,7 +257,7 @@ function menu() {
           label: 'Getting Started',
           click: () =>
             void shell.openExternal(
-              'https://github.com/Kalyan0540/Asset-Management/blob/feat/library-foundation/docs/GETTING_STARTED.md',
+              `https://github.com/Kalyan0540/Asset-Management/blob/v${app.getVersion()}/docs/GETTING_STARTED.md`,
             ),
         },
         {

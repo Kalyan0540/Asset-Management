@@ -8,6 +8,55 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class LibraryStoreTest extends InstrumentationTestCase {
+  private void copyAsset(String path, File target) throws Exception {
+    String[] children = getInstrumentation().getContext().getAssets().list(path);
+    if (children != null && children.length > 0) {
+      target.mkdirs();
+      for (String child : children) copyAsset(path + "/" + child, new File(target, child));
+    } else {
+      LibraryStore.copyVerified(
+          getInstrumentation().getContext().getAssets().open(path), target, null);
+    }
+  }
+
+  public void testDesktopAndroidBackupRoundTrip() throws Exception {
+    File root =
+        new File(
+            getInstrumentation().getTargetContext().getCacheDir(), "interop-" + UUID.randomUUID());
+    copyAsset("desktop-backup", root);
+    LibraryStore.verifyCatalog(new File(root, "catalog.sqlite"));
+    LibraryStore store = new LibraryStore(root);
+    try {
+      assertEquals(2, store.items().size());
+      JSONObject note = null;
+      for (JSONObject item : store.items()) {
+        if (item.getString("kind").equals("note")) note = item;
+        else
+          assertEquals(
+              item.getString("hash"), LibraryStore.digest(store.blob(item.getString("hash"))));
+      }
+      assertNotNull(note);
+      store.edit(
+          note.getString("id"),
+          note.getInt("revision"),
+          note.getString("title"),
+          note.getString("description"),
+          "# Edited on Android",
+          note.getJSONArray("tags"),
+          note.getJSONArray("collections"),
+          false,
+          false);
+      store.note("Android note", "# From phone");
+      File backup =
+          new File(getInstrumentation().getTargetContext().getFilesDir(), "interop-backup");
+      LibraryStore.deleteTree(backup);
+      store.snapshot(backup);
+    } finally {
+      store.close();
+      LibraryStore.deleteTree(root);
+    }
+  }
+
   public void testNativeScreenOpensOffline() throws Exception {
     android.content.Intent intent =
         new android.content.Intent(getInstrumentation().getTargetContext(), MainActivity.class)

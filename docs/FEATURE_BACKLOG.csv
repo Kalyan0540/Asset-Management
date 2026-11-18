@@ -1,9 +1,9 @@
 id,area,feature,release,milestone,depends_on,acceptance_criteria,reference,status
 F001,Foundation,Unified item and revision contracts,R1,M0,,Assets notes bookmarks and records use stable IDs and expected revisions,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
 F002,Foundation,Windows and macOS shell experiment,R1,M0,F001,Real local image and video preview plus keyboard selection runs on both platforms,P06,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
-F003,Android,Share and process-death experiment,R1,M0,F001,Shared image text and video survive restart and URI access expiry,P01;P03,Planned
+F003,Android,Share and process-death experiment,R1,M0,F001,Shared image text and video survive restart and URI access expiry,P01;P03,0.3 preview partial - see IMPLEMENTATION_STATUS.md
 F004,Sync,Conflict semantics experiment,R1,M0,F001,Two offline replicas preserve conflicting notes sets and delete-edit alternatives,Proposed,Planned
-F005,Migration,Eagle walkthrough and fixture mapping,R1,M0,,Installed version and mapped or unmapped fields are recorded against a sample library,E11;E16;E17,Planned
+F005,Migration,Eagle walkthrough and fixture mapping,R1,M0,,Installed version and mapped or unmapped fields are recorded against a sample library,E11;E16;E17,0.3 preview partial - see IMPLEMENTATION_STATUS.md
 F006,Notes,External Markdown reconciliation experiment,R1,M0,F001,External edits and renames are recovered without overwriting divergent text,O01,Planned
 F007,Agents,MCP read and reversible-write experiment,R1,M0,F001,Actual client reads allowed scope and unauthorized write fails,A01;A02,Prototype partial - see IMPLEMENTATION_STATUS.md
 F008,Foundation,Foundation and platform decision record,R1,M0,F002;F003;F004;F006;F007;F115,Choose fork or composition using measured gates licenses adaptation cost and revised architecture and estimates,P06;OPEN_SOURCE_OPTIONS.md,Prototype partial - see IMPLEMENTATION_STATUS.md

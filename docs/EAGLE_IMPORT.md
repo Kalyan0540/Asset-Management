@@ -1,6 +1,6 @@
 # Import an Eagle library
 
-Implemented for the next desktop release after 0.2.1. The existing 0.2.1 download does not include this command.
+Included in desktop version 0.3.0. Older 0.2.1 downloads do not include this command.
 
 1. Close Eagle so its files do not change while being copied.
 2. In Atlas choose **Library → Import Eagle Library…**.

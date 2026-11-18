@@ -2,7 +2,7 @@
 
 A local-first asset library inspired by Eagle, with Markdown notes, collections, tags, typed relations and agent access. The working interface uses a minimal dark theme. **This is an early desktop release, not the complete planned product.**
 
-Atlas 0.2 adds a desktop app for macOS and Windows, verified library backups, bulk organization, large previews and reviewed local AI suggestions. The browser development interface remains available. Native Android, automatic device sync, Chrome capture, Eagle migration and advanced knowledge-management features are still in development.
+Atlas 0.3 adds Eagle library import and a separate offline Android preview to the macOS/Windows app. It includes verified backups, bulk organization, large previews and reviewed local AI suggestions on desktop. The browser development interface remains available. Automatic device sync, Chrome capture and advanced knowledge-management features remain pending. Android currently supports a smaller offline feature set with manual backup transfer.
 
 ## Download the desktop app
 
@@ -72,9 +72,9 @@ npm run test:e2e
 
 If Chromium is already installed, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its executable instead of downloading a browser. Browser tests use a separate `.test-library/` directory, leaving your default library alone. GitHub Actions is configured to run build, integration and browser checks.
 
-## Next-release work
+## Eagle import and Android
 
-The `feat/eagle-import-android` branch adds [Eagle library import](docs/EAGLE_IMPORT.md) and starts the Android application. Features on this branch are not included in the existing 0.2.1 downloads until a newer release is published.
+Use desktop 0.3.0 or later for [Eagle library import](docs/EAGLE_IMPORT.md). The separate [Android preview guide](docs/ANDROID.md) covers installing the APK and manually moving verified backups between your phone and computer. See GitHub Releases for published downloads; the older 0.2.1 installers do not contain these additions.
 
 ## Project documents
 

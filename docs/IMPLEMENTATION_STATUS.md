@@ -1,6 +1,12 @@
-# Implementation status — Atlas 0.2 desktop release
+# Implementation status — Atlas 0.3 desktop and Android preview
 
-17 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
+18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
+
+## New in 0.3
+
+- Desktop Eagle import copies into a separate Atlas library, verifies originals, maps folders/tags/annotations/dates, preserves raw source metadata, reports skips and supports cancellation. Compatibility evidence is documented in EAGLE_IMPORT.md; no private real-world library has been supplied.
+- Native Android source implements offline files, notes, tags, collections, favorites, Trash, search, previews through native decoders/external viewers, and share/file-picker imports. It uses the same schema-1 catalog and hash-addressed originals as desktop.
+- Manual desktop/Android backup transfer verifies originals before switching libraries. It is not synchronization. Android compile/lint/emulator and cross-platform backup checks gate APK publication. Published release runs, not these source descriptions, establish build success.
 
 ## Available functionality
 
@@ -19,7 +25,7 @@ See [Getting Started](GETTING_STARTED.md) for nontechnical installation instruct
 
 ## Testing
 
-Local checks cover formatting, TypeScript/production build, nine integration tests across persistence, conflicts, import/export, backup/restore, bulk transactions, AI review and real MCP stdio clients. Browser tests include the original desktop/mobile-size workflows plus bulk edits and the larger preview. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs repeat the checks and additionally test the packaged application on macOS/Windows, including native backup/restore and a real MCP client launched through the bundled runtime.
+Local checks cover formatting, TypeScript/production build, twelve integration tests across persistence, conflicts, import/export, backup/restore, bulk transactions, AI review and real MCP stdio clients. Browser tests include the original desktop/mobile-size workflows plus bulk edits and the larger preview. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs repeat the checks and additionally test the packaged application on macOS/Windows, including native backup/restore and a real MCP client launched through the bundled runtime.
 
 AI tests use a deterministic local HTTP model fixture. They establish protocol, review and integrity behavior; they do not establish real-model caption accuracy or hardware performance. An installed Ollama vision model is needed to analyze actual pictures. No hosted inference is enabled by default.
 
@@ -27,10 +33,10 @@ AI tests use a deterministic local HTTP model fixture. They establish protocol, 
 
 | Area | Remaining work |
 |---|---|
-| Android | Native installable app, durable share-sheet capture, local storage, offline pinning, background jobs and physical-device testing |
+| Android | Durable share-sheet/background recovery, graph/table/AI/MCP parity, history-restore UI, production signing and physical-device testing; initial native offline app and manual transfer implemented |
 | Multi-device | Sync transport, paired devices, resumable verified media transfer, operation IDs, conflict queue, old-device rebase and remote backups |
 | Browser capture | Chrome extension, website image/text/bookmark capture, screenshots, durable native bridge |
-| Migration | Eagle library import with fidelity report; richer Obsidian import; import Markdown assets as editable notes |
+| Migration | Real-world Eagle fixture validation, additional layouts/.eaglepack support and incremental merge; richer Obsidian import; import Markdown assets as editable notes |
 | Knowledge tools | External Markdown reconciliation, autosaved drafts, rendered editing, wiki-link resolution/backlinks, embeds, custom property schemas, independent records, formulas and rollups |
 | AI | Provider credentials, hosted adapters, model installation, persisted work queue/resume, OCR, embeddings, visual similarity, controlled-vocabulary rules and evaluation sets |
 | Organization/media | Nested/smart collections, tag groups and merging, more filters, EXIF/palettes, thumbnails/proxies, specialized design/3D/font formats |

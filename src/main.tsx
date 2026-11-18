@@ -1130,7 +1130,7 @@ function App() {
             {filtered.length} items <span>·</span> {bytes(filtered.reduce((n, i) => n + i.size, 0))}
           </span>
           <span>
-            Personal library <span>·</span> Early release 0.2
+            Personal library <span>·</span> Early release 0.3
           </span>
         </footer>
       </main>

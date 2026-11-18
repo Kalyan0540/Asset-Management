@@ -276,6 +276,7 @@ export async function importEagleLibrary(
       } catch (error) {
         options.signal?.throwIfAborted();
         if (
+          (error as NodeJS.ErrnoException).code?.includes('SQLITE') ||
           ['ENOSPC', 'EIO', 'EROFS', 'EMFILE'].includes((error as NodeJS.ErrnoException).code ?? '')
         )
           throw error;

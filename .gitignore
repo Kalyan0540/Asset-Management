@@ -17,3 +17,8 @@ android/local.properties
 android/**/build/
 *.keystore
 *.jks
+android/app/src/androidTest/assets/desktop-backup/
+android/interop-backup/
+android/interop-backup.tar
+android/atlas-android.png
+android/downloads/

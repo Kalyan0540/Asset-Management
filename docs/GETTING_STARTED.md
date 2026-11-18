@@ -2,7 +2,7 @@
 
 Atlas is a desktop app for macOS and Windows. You do not need Node, a terminal, Git, or programming knowledge to use the desktop download.
 
-**This is an early release, not the whole Eagle replacement yet.** Use a small collection to try it first, and keep your original files. Android and automatic synchronization between devices are not available in this release.
+**This is an early release, not the whole Eagle replacement yet.** Use a small collection to try it first, and keep your original files. Android has a separate [preview app and setup guide](ANDROID.md). Automatic synchronization is not available; backups can transfer a library manually.
 
 ## 1. Download the right file
 
@@ -10,9 +10,9 @@ Open [Atlas downloads](https://github.com/Kalyan0540/Asset-Management/releases) 
 
 | Your computer | File to choose |
 |---|---|
-| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.2.1-mac-arm64.dmg` |
-| Mac with an Intel processor | `Atlas-0.2.1-mac-x64.dmg` |
-| Windows computer with an Intel/AMD processor | `Atlas-0.2.1-win-x64.exe` |
+| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.3.0-mac-arm64.dmg` |
+| Mac with an Intel processor | `Atlas-0.3.0-mac-x64.dmg` |
+| Windows computer with an Intel/AMD processor | `Atlas-0.3.0-win-x64.exe` |
 
 To check your Mac, click the **Apple menu → About This Mac**. “Chip: Apple …” means use the Apple chip download. “Processor: Intel …” means use the Intel download.
 
@@ -53,8 +53,12 @@ Install and open Ollama, choose/download a model there, then return to Atlas and
 
 Select a note or a PNG/JPEG/WebP image and click **Suggest tags & description**. Review the result before applying it. Existing tags are retained. Replacing your description is a separate checkbox. If you dislike an applied result, use the item's **Revision history** to restore an earlier version. This feature does not install a model silently or send your content to a hosted AI service.
 
-## What remains in development
+## Import your Eagle library
+
+Choose **Library → Import Eagle Library…** and follow the [Eagle import guide](EAGLE_IMPORT.md). Close Eagle first. Atlas creates a separate library and reports anything it could not import.
+
+## Connect a local agent
 
 If you use a local AI agent that supports MCP, choose **Agents → Copy Read-only MCP Configuration** in Atlas. Paste it into the agent's MCP settings and leave Atlas open. This lets the agent search and read the library without giving it edit tools; no developer installation is required for this connection.
 
-Automatic multi-device sync, Android, the Chrome capture extension, Eagle library import, advanced note/table features, large-library performance work, and many specialist file previews remain pending. The table currently displays asset metadata; it is not yet a complete Notion-style database. The graph shows explicit relations; it does not yet parse every Obsidian-style link. These limits are recorded in the [implementation status](IMPLEMENTATION_STATUS.md) and full [project plan](PROJECT_PLAN.md).
+Automatic multi-device sync, the Chrome capture extension, advanced note/table features, large-library performance work, and many specialist file previews remain pending. Android currently offers a smaller offline feature set. The table currently displays asset metadata; it is not yet a complete Notion-style database. The graph shows explicit relations; it does not yet parse every Obsidian-style link. These limits are recorded in the [implementation status](IMPLEMENTATION_STATUS.md) and full [project plan](PROJECT_PLAN.md).
