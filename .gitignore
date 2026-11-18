@@ -12,3 +12,8 @@ playwright-report/
 !.env.example
 *.log
 .DS_Store
+android/.gradle/
+android/local.properties
+android/**/build/
+*.keystore
+*.jks
