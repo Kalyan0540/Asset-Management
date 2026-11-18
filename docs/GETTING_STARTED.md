@@ -68,7 +68,7 @@ Click **AI suggestions** in Atlas. This release works with the free [Ollama app]
 
 Install and open Ollama, choose/download a model there, then return to Atlas and click **Refresh**. For images, choose a model that supports image input; a text-only model cannot describe a picture. Model downloads can be several GB and may be slow on a computer with limited memory.
 
-Select a note or a PNG/JPEG/WebP image and click **Suggest tags & description**. Review the result before applying it. Existing tags are retained. Replacing your description is a separate checkbox. If you dislike an applied result, use the item's **Revision history** to restore an earlier version. This feature does not install a model silently or send your content to a hosted AI service.
+Select a note or a PNG, JPEG, or WebP image and choose **Suggest tags, folders & description**. Select multiple items to queue a batch. For a note, choose a writing action and click **Generate draft**. Review suggestions before applying them. You can use **Revision history** to restore an earlier version. Atlas desktop runs these actions through your local Ollama connection.
 
 ## Import your Eagle library
 
