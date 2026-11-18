@@ -118,6 +118,31 @@ public final class LibraryStoreTest extends InstrumentationTestCase {
     }
   }
 
+  public void testAcceptedShareSurvivesReopenWithTagsAndNestedFolder() throws Exception {
+    File root = new File(getInstrumentation().getTargetContext().getCacheDir(), "shares-" + UUID.randomUUID());
+    LibraryStore store = new LibraryStore(root);
+    try {
+      String parent = store.collection("Research").getString("id");
+      String folder = store.collection("Links", parent).getString("id");
+      ShareInbox.prepare(getInstrumentation().getTargetContext().getContentResolver(), store,
+          java.util.Collections.emptyList(), "https://example.org/reference", "Reference",
+          "https://example.org/reference", new JSONArray().put("design"), folder);
+      assertEquals(1, ShareInbox.pending(store));
+      store.close();
+      store = new LibraryStore(root);
+      assertEquals(1, ShareInbox.flush(store).saved());
+      assertEquals(0, ShareInbox.flush(store).saved());
+      JSONObject captured = store.items().get(0);
+      assertEquals(folder, captured.getJSONArray("collections").getString(0));
+      assertEquals("design", captured.getJSONArray("tags").getString(0));
+      assertEquals("https://example.org/reference", captured.getString("sourceUrl"));
+      assertEquals(1, store.history(captured.getString("id")).size());
+    } finally {
+      store.close();
+      LibraryStore.deleteTree(root);
+    }
+  }
+
   public void testInvalidHashAndFailedCopyDoNotCreateRecords() throws Exception {
     File root =
         new File(

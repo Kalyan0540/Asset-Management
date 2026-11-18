@@ -8,6 +8,8 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.text.*;
 import android.util.LruCache;
@@ -24,7 +26,11 @@ public final class MainActivity extends Activity {
   private EditText search;
   private Spinner filter;
   private GridView grid;
-  private String selectedFilter = "all";
+  private String selectedFilter = "all", selectedType = "", sortOrder = "Newest";
+  private boolean listView;
+  private Runnable flushEditor;
+  private final Handler editorHandler = new Handler(Looper.getMainLooper());
+  private static final List<String> SCOPES = Arrays.asList("all", "notes", "favorites", "uncategorized", "untagged", "trash");
   private final List<String> filterIds = new ArrayList<>();
   private List<JSONObject> visible = new ArrayList<>();
   private final LruCache<String, Bitmap> thumbnails =
@@ -34,7 +40,10 @@ public final class MainActivity extends Activity {
           return value.getByteCount();
         }
       };
-  private static final int IMPORT = 10, EXPORT_BACKUP = 11, RESTORE_BACKUP = 12;
+  private static final int IMPORT = 10, EXPORT_BACKUP = 11, RESTORE_BACKUP = 12, PHOTO = 13, EXPORT_ITEM = 14, NOTE_IMAGES = 15;
+  private EditText noteImagesTarget;
+  private JSONArray noteImageTags;
+  private JSONObject exporting;
   private final int background = Color.rgb(22, 23, 25),
       panel = Color.rgb(39, 40, 45),
       muted = Color.rgb(162, 166, 178),
@@ -96,6 +105,17 @@ public final class MainActivity extends Activity {
         button("Import files", () -> pickFiles()), new LinearLayout.LayoutParams(0, dp(52), 1));
     actions.addView(button("New note", this::newNote), new LinearLayout.LayoutParams(0, dp(52), 1));
     root.addView(actions);
+    LinearLayout browse = row();
+    Button display = button("List", () -> {
+      listView = !listView;
+      ((Button) browse.getChildAt(0)).setText(listView ? "Grid" : "List");
+      grid.setNumColumns(listView ? 1 : GridView.AUTO_FIT);
+      refreshItems();
+    });
+    browse.addView(display, new LinearLayout.LayoutParams(0, dp(48), 1));
+    browse.addView(button("Filters", this::filterMenu), new LinearLayout.LayoutParams(0, dp(48), 1));
+    browse.addView(button("Photos", this::pickPhotos), new LinearLayout.LayoutParams(0, dp(48), 1));
+    root.addView(browse);
     filter = new Spinner(this);
     filter.setContentDescription("Filter collection");
     root.addView(filter, new LinearLayout.LayoutParams(-1, dp(48)));
@@ -120,14 +140,20 @@ public final class MainActivity extends Activity {
     root.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
     grid.setOnItemClickListener(
         (p, v, n, id) -> {
-          if (!app.busy) details(visible.get(n));
+          if (app.busy) return;
+          JSONObject item = visible.get(n);
+          if (item.optString("kind").equals("folder")) { selectedFilter = item.optString("id"); refresh(); }
+          else details(item);
         });
     if (saved != null) {
       search.setText(saved.getString("query", ""));
       selectedFilter = saved.getString("filter", "all");
     }
     refresh();
-    if (saved == null) receive(getIntent());
+    if (saved == null) {
+      if (ShareInbox.pending(app.store) > 0) finishCaptures();
+      receive(getIntent());
+    }
   }
 
   @Override
@@ -137,6 +163,12 @@ public final class MainActivity extends Activity {
       app.active = new java.lang.ref.WeakReference<>(this);
       refresh();
     }
+  }
+
+  @Override
+  protected void onStop() {
+    if (flushEditor != null) flushEditor.run();
+    super.onStop();
   }
 
   @Override
@@ -218,12 +250,15 @@ public final class MainActivity extends Activity {
     if (grid == null) return;
     try {
       filterIds.clear();
-      Collections.addAll(filterIds, "all", "notes", "favorites", "trash");
-      List<String> labels =
-          new ArrayList<>(Arrays.asList("All items", "Notes", "Favorites", "Trash"));
+      filterIds.addAll(SCOPES);
+      List<String> labels = new ArrayList<>(Arrays.asList("All items", "Notes", "Favorites", "Uncategorized", "Untagged", "Trash"));
       for (JSONObject c : app.store.collections()) {
         filterIds.add(c.getString("id"));
         labels.add(c.getString("name"));
+      }
+      for (JSONObject saved : app.store.smartFolders()) {
+        filterIds.add("smart:" + saved.getString("id"));
+        labels.add("Smart · " + saved.getString("name"));
       }
       filter.setAdapter(
           new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, labels));
@@ -245,11 +280,25 @@ public final class MainActivity extends Activity {
     try {
       String q = search.getText().toString().toLowerCase(Locale.ROOT);
       List<JSONObject> found = new ArrayList<>();
+      JSONObject smartFolder = null;
+      if (selectedFilter.startsWith("smart:"))
+        for (JSONObject candidate : app.store.smartFolders())
+          if (candidate.getString("id").equals(selectedFilter.substring(6))) smartFolder = candidate;
+      if (!SCOPES.contains(selectedFilter) && smartFolder == null && q.isEmpty() && selectedType.isEmpty()) {
+        for (JSONObject folder : app.store.collections())
+          if (selectedFilter.equals(folder.optString("parentId", "")))
+            found.add(folder.put("kind", "folder"));
+      }
+      List<JSONObject> matches = new ArrayList<>();
       for (JSONObject item : app.store.items()) {
         if (item.optBoolean("trashed") != selectedFilter.equals("trash")) continue;
         if (selectedFilter.equals("notes") && !item.optString("kind").equals("note")) continue;
         if (selectedFilter.equals("favorites") && !item.optBoolean("favorite")) continue;
-        if (!Arrays.asList("all", "notes", "favorites", "trash").contains(selectedFilter)
+        if (selectedFilter.equals("uncategorized") && item.getJSONArray("collections").length() > 0) continue;
+        if (selectedFilter.equals("untagged") && item.getJSONArray("tags").length() > 0) continue;
+        if (!selectedType.isEmpty() && !selectedType.equals(type(item))) continue;
+        if (smartFolder != null && !app.store.matchesSmartFolder(item, smartFolder)) continue;
+        if (smartFolder == null && !SCOPES.contains(selectedFilter)
             && !contains(item.optJSONArray("collections"), selectedFilter)) continue;
         String hay =
             item.optString("title")
@@ -259,8 +308,12 @@ public final class MainActivity extends Activity {
                 + item.optString("body")
                 + " "
                 + item.optJSONArray("tags");
-        if (hay.toLowerCase(Locale.ROOT).contains(q)) found.add(item);
+        if (hay.toLowerCase(Locale.ROOT).contains(q)) matches.add(item);
       }
+      if (sortOrder.equals("Name")) matches.sort(Comparator.comparing(item -> item.optString("title"), String.CASE_INSENSITIVE_ORDER));
+      else if (sortOrder.equals("Largest")) matches.sort(Comparator.comparingLong((JSONObject item) -> item.optLong("size")).reversed());
+      else matches.sort(Comparator.comparing((JSONObject item) -> item.optString("createdAt")).reversed());
+      found.addAll(matches);
       visible = found;
       grid.setAdapter(new Cards());
       status.setText(
@@ -315,6 +368,54 @@ public final class MainActivity extends Activity {
         });
   }
 
+  private String type(JSONObject item) {
+    if (item.optString("kind").equals("note")) return "md";
+    String name = item.optString("filename");
+    int dot = name.lastIndexOf('.');
+    return dot >= 0 ? name.substring(dot + 1).toLowerCase(Locale.ROOT) : "file";
+  }
+
+  private void filterMenu() {
+    LinearLayout controls = new LinearLayout(this);
+    controls.setOrientation(LinearLayout.VERTICAL);
+    controls.setPadding(dp(16), 0, dp(16), 0);
+    try {
+      TreeSet<String> types = new TreeSet<>();
+      for (JSONObject item : app.store.items()) if (!item.optBoolean("trashed")) types.add(type(item));
+      List<String> names = new ArrayList<>();
+      names.add("All types");
+      names.addAll(types);
+      String[] orders = {"Newest", "Name", "Largest"};
+      Spinner fileTypes = new Spinner(this);
+      fileTypes.setContentDescription("File type");
+      fileTypes.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, names));
+      fileTypes.setSelection(Math.max(0, names.indexOf(selectedType)));
+      Spinner sorting = new Spinner(this);
+      sorting.setContentDescription("Sort items");
+      sorting.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, orders));
+      sorting.setSelection(Arrays.asList(orders).indexOf(sortOrder));
+      controls.addView(fileTypes);
+      controls.addView(sorting);
+      new AlertDialog.Builder(this).setTitle("Filters and sorting").setView(controls).setNegativeButton("Cancel", null)
+          .setPositiveButton("Apply", (dialog, which) -> {
+            selectedType = fileTypes.getSelectedItemPosition() == 0 ? "" : (String) fileTypes.getSelectedItem();
+            sortOrder = (String) sorting.getSelectedItem();
+            refreshItems();
+          }).show();
+    } catch (Exception failed) { error(failed); }
+  }
+
+  private void pickPhotos() {
+    if (android.os.Build.VERSION.SDK_INT >= 33) {
+      Intent photo = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES)
+          .setType("image/*").putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 20);
+      try { startActivityForResult(photo, PHOTO); return; }
+      catch (ActivityNotFoundException ignored) { }
+    }
+    startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*")
+        .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true), PHOTO);
+  }
+
   private void pickFiles() {
     Intent intent =
         new Intent(Intent.ACTION_OPEN_DOCUMENT)
@@ -328,7 +429,56 @@ public final class MainActivity extends Activity {
   protected void onActivityResult(int request, int result, Intent data) {
     super.onActivityResult(request, result, data);
     if (result != RESULT_OK || data == null) return;
-    if (request == IMPORT) {
+    if (request == NOTE_IMAGES && noteImagesTarget != null) {
+      final EditText target = noteImagesTarget;
+      final JSONArray tags = noteImageTags;
+      noteImagesTarget = null;
+      noteImageTags = null;
+      List<Uri> images = uris(data);
+      work(() -> {
+        StringBuilder embeds = new StringBuilder();
+        List<String> skipped = new ArrayList<>();
+        for (Uri uri : images) {
+          try {
+            String mime = getContentResolver().getType(uri);
+            if (mime == null || !mime.startsWith("image/")) continue;
+            String name = "Embedded image";
+            try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+              if (cursor != null && cursor.moveToFirst() && cursor.getString(0) != null) name = cursor.getString(0);
+            }
+            InputStream in = getContentResolver().openInputStream(uri);
+            if (in == null) throw new IOException("Image unavailable");
+            JSONObject asset = app.store.captureFile(UUID.randomUUID().toString(), in, name, mime, "", tags, "");
+            embeds.append("\n\n![").append(asset.getString("title").replace("]", ""))
+                .append("](atlas:").append(asset.getString("id")).append(")\n");
+          } catch (Exception failed) { skipped.add(failed.getMessage()); }
+        }
+        if (embeds.length() > 0) runOnUiThread(() -> {
+          if (!target.isAttachedToWindow()) return;
+          int position = Math.max(0, target.getSelectionEnd());
+          target.getText().insert(position, embeds.toString());
+        });
+        return skipped.isEmpty() ? null : "Some images could not be added: " + String.join(", ", skipped);
+      });
+    } else if (request == PHOTO) {
+      reviewShare(uris(data), "", "");
+    } else if (request == EXPORT_ITEM && exporting != null && data.getData() != null) {
+      JSONObject item = exporting;
+      exporting = null;
+      work(() -> {
+        try (OutputStream out = getContentResolver().openOutputStream(data.getData(), "w")) {
+          if (out == null) throw new IOException("Could not open destination");
+          if (item.optString("kind").equals("note"))
+            out.write(item.optString("body").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+          else try (InputStream in = new FileInputStream(app.store.blob(item.getString("hash")))) {
+            byte[] buffer = new byte[65536];
+            int read;
+            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+          }
+        }
+        return "File exported.";
+      });
+    } else if (request == IMPORT) {
       List<Uri> uris = uris(data);
       for (Uri uri : uris)
         try {
@@ -413,17 +563,113 @@ public final class MainActivity extends Activity {
       if (uri != null) list.add(uri);
     }
     if (list.isEmpty()) list = uris(intent);
-    if (!list.isEmpty()) importUris(list);
-    else {
-      CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
-      if (text != null)
-        work(
-            () -> {
-              app.store.note("Shared note", text.toString());
-              return "Shared text saved as a note.";
-            });
-    }
+    CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+    reviewShare(list, text == null ? "" : text.toString(), Objects.toString(intent.getStringExtra(Intent.EXTRA_SUBJECT), ""));
     intent.setAction(null);
+  }
+
+  private void finishCaptures() {
+    final LibraryStore library = app.store;
+    work(() -> captureMessage(ShareInbox.flush(library), ""));
+  }
+
+  private String captureMessage(ShareInbox.Result result, String skipped) {
+    String warnings = String.join("\n", result.failures());
+    String issues = skipped.isEmpty() ? warnings : skipped + "\n" + warnings;
+    return result.saved() + " items saved to Atlas." + (issues.trim().isEmpty() ? "" : "\n\n" + issues);
+  }
+
+  private JSONArray tagValues(String value) {
+    LinkedHashSet<String> tags = new LinkedHashSet<>();
+    for (String tag : value.split(",")) if (!tag.trim().isEmpty()) tags.add(tag.trim());
+    return new JSONArray(tags);
+  }
+
+  private void reviewShare(List<Uri> candidates, String text, String subject) {
+    List<Uri> files = new ArrayList<>();
+    for (Uri uri : candidates) if (uri != null && "content".equals(uri.getScheme()) && !files.contains(uri)) files.add(uri);
+    if (files.isEmpty() && text.trim().isEmpty()) return;
+    if (files.size() > 60) { message("Share up to 60 files at once."); return; }
+    String lastLine = text.trim().substring(text.trim().lastIndexOf('\n') + 1).trim();
+    String link = ShareInbox.webUrl(lastLine) ? lastLine : "";
+    boolean bookmark = !link.isEmpty() && text.trim().equals(link);
+    String noteText = bookmark ? link : ("> " + text.replace("\n", "\n> "));
+    LinearLayout contents = new LinearLayout(this);
+    contents.setOrientation(LinearLayout.VERTICAL);
+    contents.setPadding(dp(18), 0, dp(18), dp(12));
+    String fallback = files.isEmpty() ? (bookmark ? Uri.parse(link).getHost() : "Shared excerpt") : "Shared file";
+    if (files.size() == 1) {
+      try (Cursor cursor = getContentResolver().query(files.get(0), new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+        if (cursor != null && cursor.moveToFirst() && cursor.getString(0) != null) fallback = cursor.getString(0);
+      } catch (Exception ignored) { }
+    }
+    String caption = subject.trim().isEmpty() || !files.isEmpty() ? fallback : subject.trim();
+    EditText title = field("Title", caption.substring(0, Math.min(caption.length(), 250)), false);
+    EditText source = field("Source URL", link, false);
+    EditText tags = field("Tags (comma separated)", getPreferences(0).getString("captureTags", ""), false);
+    if (files.size() == 1) {
+      Uri uri = files.get(0);
+      ImageView image = new ImageView(this);
+      image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+      app.worker.execute(() -> {
+        try {
+          BitmapFactory.Options size = new BitmapFactory.Options();
+          size.inJustDecodeBounds = true;
+          try (InputStream input = getContentResolver().openInputStream(uri)) { BitmapFactory.decodeStream(input, null, size); }
+          if (size.outWidth < 1 || size.outHeight < 1) return;
+          size.inJustDecodeBounds = false;
+          size.inSampleSize = 1;
+          while (Math.max(size.outWidth, size.outHeight) / size.inSampleSize > 640) size.inSampleSize *= 2;
+          try (InputStream input = getContentResolver().openInputStream(uri)) {
+            Bitmap thumbnail = BitmapFactory.decodeStream(input, null, size);
+            if (thumbnail != null) runOnUiThread(() -> {
+              image.setImageBitmap(thumbnail);
+              image.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(140)));
+            });
+          }
+        } catch (Exception ignored) { }
+      });
+      contents.addView(image, new LinearLayout.LayoutParams(-1, 0));
+    }
+    if (!files.isEmpty()) contents.addView(label(files.size() + " files", 14, muted));
+    else contents.addView(label(text.substring(0, Math.min(text.length(), 260)), 14, muted));
+    if (files.size() < 2) contents.addView(title);
+    contents.addView(source);
+    contents.addView(tags);
+    try {
+      List<JSONObject> folders = app.store.collections();
+      List<String> labels = new ArrayList<>();
+      labels.add("Uncategorized");
+      for (JSONObject folder : folders) labels.add(folder.getString("name"));
+      Spinner destination = new Spinner(this);
+      destination.setContentDescription("Save to folder");
+      destination.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, labels));
+      for (int i = 0; i < folders.size(); i++)
+        if (folders.get(i).optString("id").equals(getPreferences(0).getString("captureFolder", "")))
+          destination.setSelection(i + 1);
+      contents.addView(destination);
+      ScrollView scroll = new ScrollView(this);
+      scroll.addView(contents);
+      AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Save to Atlas").setView(scroll)
+          .setNegativeButton("Cancel", null)
+          .setPositiveButton(files.isEmpty() ? (bookmark ? "Save link" : "Save note") : "Save files", null).create();
+      dialog.setOnShowListener(ignored -> dialog.getButton(-1).setOnClickListener(view -> {
+        if (app.busy) { message("Wait for the current operation to finish, then save."); return; }
+        String name = title.getText().toString().trim(), url = source.getText().toString().trim(), tagText = tags.getText().toString();
+        if (name.isEmpty() || name.length() > 250) { title.setError("Use 1–250 characters"); return; }
+        if (!url.isEmpty() && !ShareInbox.webUrl(url)) { source.setError("Enter a valid website address"); return; }
+        int choice = destination.getSelectedItemPosition();
+        String folder = choice <= 0 ? "" : folders.get(choice - 1).optString("id");
+        LibraryStore library = app.store;
+        getPreferences(0).edit().putString("captureTags", tagText).putString("captureFolder", folder).apply();
+        dialog.dismiss();
+        work(() -> {
+          String skipped = ShareInbox.prepare(getContentResolver(), library, files, noteText, name, url, tagValues(tagText), folder);
+          return captureMessage(ShareInbox.flush(library), skipped);
+        });
+      }));
+      dialog.show();
+    } catch (Exception failed) { error(failed); }
   }
 
   private void newNote() {
@@ -467,7 +713,7 @@ public final class MainActivity extends Activity {
       "Back up library",
       "Restore Atlas backup",
       "Libraries on this phone",
-      "About this preview"
+      "About this preview", "Retry pending captures", "New subfolder", "New Smart Folder"
     };
     new AlertDialog.Builder(this)
         .setTitle("Library")
@@ -537,18 +783,53 @@ public final class MainActivity extends Activity {
                                 }))
                     .show();
               }
+              if (n == 5) { if (ShareInbox.pending(app.store) == 0) message("No pending captures."); else finishCaptures(); }
+              if (n == 6) newSubfolder();
+              if (n == 7) newSmartFolder();
               if (n == 4)
                 message(
-                    "Atlas Android 0.3 preview\n\n"
-                        + "An offline library for files, notes, tags and collections. Backups"
-                        + " transfer between Android and desktop manually. Import Eagle on desktop,"
-                        + " then transfer an Atlas backup to this phone.\n\n"
-                        + "Automatic sync, graph/table views, AI and MCP on Android, and background"
-                        + " share recovery are not yet included. Keep Atlas open until imports"
-                        + " finish. This is a test-signed APK, not a Play Store release. Back up"
-                        + " before uninstalling.");
+                    "Atlas Android 0.4 preview\n\n"
+                        + "An offline library for files, notes, tags and folders. Share images, links and text into Atlas"
+                        + " or transfer a verified backup between Android and desktop.");
             })
         .show();
+  }
+
+  private void newSmartFolder() {
+    LinearLayout options = new LinearLayout(this);
+    options.setOrientation(LinearLayout.VERTICAL);
+    options.setPadding(dp(16),0,dp(16),0);
+    EditText name = field("Name", "", false);
+    EditText value = field("Match text", "", false);
+    String[] fields = {"Name", "Tag", "File type"};
+    String[] keys = {"name", "tag", "type"};
+    Spinner fieldChoice = new Spinner(this);
+    fieldChoice.setContentDescription("Filter field");
+    fieldChoice.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, fields));
+    options.addView(name);
+    options.addView(fieldChoice);
+    options.addView(value);
+    AlertDialog dialog = new AlertDialog.Builder(this).setTitle("New Smart Folder").setView(options)
+        .setNegativeButton("Cancel",null).setPositiveButton("Create",null).create();
+    dialog.setOnShowListener(ignored -> dialog.getButton(-1).setOnClickListener(view -> {
+      try {
+        selectedFilter = "smart:" + app.store.saveSmartFolder(name.getText().toString(),
+            keys[fieldChoice.getSelectedItemPosition()], value.getText().toString());
+        dialog.dismiss();
+        refresh();
+      } catch (Exception failed) { value.setError(failed.getMessage()); }
+    }));
+    dialog.show();
+  }
+
+  private void newSubfolder() {
+    if (SCOPES.contains(selectedFilter) || selectedFilter.startsWith("smart:")) { message("Open the parent folder first."); return; }
+    EditText name = field("Folder name", "", false);
+    new AlertDialog.Builder(this).setTitle("New subfolder").setView(name).setNegativeButton("Cancel", null)
+        .setPositiveButton("Create", (dialog, which) -> {
+          try { app.store.collection(name.getText().toString(), selectedFilter); refresh(); }
+          catch (Exception failed) { error(failed); }
+        }).show();
   }
 
   private void details(JSONObject original) {
@@ -573,8 +854,29 @@ public final class MainActivity extends Activity {
           body = field("Markdown note", item.optString("body"), true);
       fields.addView(title);
       fields.addView(description);
+      EditText source = field("Source link", item.optString("sourceUrl"), false);
+      fields.addView(source);
       fields.addView(tags);
-      if (item.getString("kind").equals("note")) fields.addView(body);
+      RatingBar rating = new RatingBar(this, null, android.R.attr.ratingBarStyleSmall);
+      rating.setNumStars(5);
+      rating.setStepSize(1);
+      rating.setRating(item.optInt("rating"));
+      rating.setIsIndicator(false);
+      rating.setContentDescription("Rating");
+      fields.addView(rating, new LinearLayout.LayoutParams(-2, dp(48)));
+      if (item.getString("kind").equals("note")) {
+        fields.addView(body);
+        LinearLayout documentActions = row();
+        documentActions.addView(button("Link an item", () -> linkItem(body, item)), new LinearLayout.LayoutParams(0, dp(48), 1));
+        documentActions.addView(button("Read note", () -> readNote(item, body.getText().toString())), new LinearLayout.LayoutParams(0, dp(48), 1));
+        fields.addView(documentActions);
+        fields.addView(button("Add images to note", () -> {
+          noteImagesTarget = body;
+          noteImageTags = tagValues(tags.getText().toString());
+          startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*")
+              .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true), NOTE_IMAGES);
+        }));
+      }
       CheckBox favorite = new CheckBox(this);
       favorite.setText("Favorite");
       favorite.setChecked(item.optBoolean("favorite"));
@@ -597,49 +899,258 @@ public final class MainActivity extends Activity {
         fields.addView(label("Imported source metadata is preserved in backups.", 12, muted));
       ScrollView scroll = new ScrollView(this);
       scroll.addView(fields);
-      AlertDialog dialog =
-          new AlertDialog.Builder(this)
-              .setTitle("Item details")
-              .setView(scroll)
-              .setNegativeButton("Close", null)
-              .setPositiveButton("Save changes", null)
-              .create();
-      dialog.setOnShowListener(
-          d ->
-              dialog
-                  .getButton(-1)
-                  .setOnClickListener(
-                      v -> {
-                        try {
-                          LinkedHashSet<String> unique = new LinkedHashSet<>();
-                          for (String tag : tags.getText().toString().split(","))
-                            if (!tag.trim().isEmpty()) unique.add(tag.trim());
-                          JSONArray selected = new JSONArray();
-                          for (int i = 0; i < checks.size(); i++)
-                            if (checks.get(i).isChecked())
-                              selected.put(collections.get(i).getString("id"));
-                          app.store.edit(
-                              item.getString("id"),
-                              item.getInt("revision"),
-                              title.getText().toString(),
-                              description.getText().toString(),
-                              body.getText().toString(),
-                              (tags.getText().toString().equals(join(item.getJSONArray("tags")))
-                                  ? item.getJSONArray("tags")
-                                  : new JSONArray(unique)),
-                              selected,
-                              favorite.isChecked(),
-                              trash.isChecked());
-                          dialog.dismiss();
-                          refresh();
-                        } catch (Exception e) {
-                          error(e);
-                        }
-                      }));
+      TextView saveState = label("", 12, muted);
+      fields.addView(saveState);
+      final JSONObject[] saved = {item};
+      final boolean[] persisted = {true}, conflict = {false};
+      String draftKey = app.store.root.getName() + ":" + item.getString("id");
+      android.content.SharedPreferences drafts = getSharedPreferences("item-drafts", MODE_PRIVATE);
+      String pending = drafts.getString(draftKey, "");
+      if (!pending.isEmpty()) {
+        JSONObject draft = new JSONObject(pending);
+        conflict[0] = draft.optInt("revision") != item.getInt("revision");
+        if (!conflict[0]) {
+          title.setText(draft.optString("title"));
+          description.setText(draft.optString("description"));
+          body.setText(draft.optString("body"));
+          tags.setText(draft.optString("tagText"));
+          source.setText(draft.optString("sourceUrl"));
+          rating.setRating(draft.optInt("rating"));
+          favorite.setChecked(draft.optBoolean("favorite"));
+          trash.setChecked(draft.optBoolean("trashed"));
+          for (int i=0; i<checks.size(); i++)
+            checks.get(i).setChecked(contains(draft.optJSONArray("collections"), collections.get(i).getString("id")));
+          saveState.setText("Recovered an unsaved draft");
+        } else {
+          saveState.setText("A draft conflicts with another edit");
+          fields.addView(button("Review conflicting draft", () -> new AlertDialog.Builder(this)
+              .setTitle("Unsaved draft").setMessage(draft.optString("title") + "\n\n" + draft.optString("body"))
+              .setNeutralButton("Copy draft text", (dialog, which) -> ((android.content.ClipboardManager)
+                  getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Atlas draft", draft.optString("body"))))
+              .setNegativeButton("Keep draft", null)
+              .setPositiveButton("Use saved version", (dialog, which) -> {
+                drafts.edit().remove(draftKey).apply();
+                conflict[0] = false;
+                saveState.setText("Saved version retained");
+              }).show()));
+        }
+      }
+      class Changes {
+        JSONObject snapshot() throws JSONException {
+          JSONArray chosen = new JSONArray();
+          for (int i = 0; i < checks.size(); i++)
+            if (checks.get(i).isChecked()) chosen.put(collections.get(i).getString("id"));
+          return new JSONObject().put("title", title.getText().toString())
+              .put("description", description.getText().toString()).put("body", body.getText().toString())
+              .put("tagText", tags.getText().toString()).put("collections", chosen)
+              .put("favorite", favorite.isChecked()).put("trashed", trash.isChecked())
+              .put("sourceUrl", source.getText().toString().trim())
+              .put("rating", (int) rating.getRating()).put("revision", saved[0].getInt("revision"));
+        }
+        void save() {
+          if (conflict[0]) return;
+          try {
+            JSONObject draft = snapshot(), previous = saved[0];
+            JSONArray nextTags = draft.getString("tagText").equals(join(previous.getJSONArray("tags")))
+                ? previous.getJSONArray("tags") : tagValues(draft.getString("tagText"));
+            Set<String> oldFolders = new HashSet<>(), newFolders = new HashSet<>();
+            JSONArray prior = previous.getJSONArray("collections"), next = draft.getJSONArray("collections");
+            for (int n=0; n<prior.length(); n++) oldFolders.add(prior.getString(n));
+            for (int n=0; n<next.length(); n++) newFolders.add(next.getString(n));
+            boolean changed = !oldFolders.equals(newFolders) || !nextTags.toString().equals(previous.getJSONArray("tags").toString());
+            for (String key : Arrays.asList("title","description","body","sourceUrl","rating","favorite","trashed"))
+              if (!draft.optString(key).equals(previous.optString(key, key.equals("rating") ? "0" : ""))) changed = true;
+            if (changed) saved[0] = app.store.edit(previous.getString("id"), draft.getInt("revision"),
+                draft.getString("title"), draft.getString("description"), draft.getString("body"), nextTags, next,
+                draft.getBoolean("favorite"), draft.getBoolean("trashed"), draft.getString("sourceUrl"), draft.getInt("rating"));
+            persisted[0] = true;
+            drafts.edit().remove(draftKey).apply();
+            saveState.setText(changed ? "Saved" : "");
+          } catch (Exception failed) {
+            persisted[0] = false;
+            saveState.setText("Draft kept · " + failed.getMessage());
+          }
+        }
+      }
+      Changes changes = new Changes();
+      Runnable save = changes::save;
+      Runnable queue = () -> {
+        if (conflict[0]) { saveState.setText("Review the conflicting draft before editing"); return; }
+        try {
+          drafts.edit().putString(draftKey, changes.snapshot().toString()).apply();
+          saveState.setText("Saving…");
+          editorHandler.removeCallbacks(save);
+          editorHandler.postDelayed(save, 400);
+        } catch (Exception failed) { saveState.setText(failed.getMessage()); }
+      };
+      TextWatcher watcher = new TextWatcher() {
+        public void beforeTextChanged(CharSequence text, int start, int count, int after) {}
+        public void onTextChanged(CharSequence text, int start, int before, int count) { queue.run(); }
+        public void afterTextChanged(Editable text) {}
+      };
+      for (EditText text : Arrays.asList(title, description, source, tags, body)) text.addTextChangedListener(watcher);
+      for (CheckBox check : checks) check.setOnCheckedChangeListener((button, checked) -> queue.run());
+      favorite.setOnCheckedChangeListener((button, checked) -> queue.run());
+      trash.setOnCheckedChangeListener((button, checked) -> queue.run());
+      rating.setOnRatingBarChangeListener((bar, value, fromUser) -> queue.run());
+      fields.addView(button("Export file", () -> exportItem(saved[0])));
+      AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Item details").setView(scroll)
+          .setNegativeButton("Done", null).create();
+      fields.addView(button("Connections", () -> {
+        editorHandler.removeCallbacks(save);
+        save.run();
+        if (persisted[0]) { dialog.dismiss(); connections(saved[0]); }
+      }));
+      fields.addView(button("Revision history", () -> {
+        editorHandler.removeCallbacks(save);
+        save.run();
+        if (persisted[0]) { dialog.dismiss(); revisionHistory(saved[0]); }
+      }));
+      dialog.setOnShowListener(ignored -> dialog.getButton(-2).setOnClickListener(view -> {
+        editorHandler.removeCallbacks(save);
+        save.run();
+        dialog.dismiss();
+        if (!persisted[0]) message("The edit remains a draft. Reopen this item to finish it.");
+      }));
+      dialog.setOnDismissListener(ignored -> {
+        editorHandler.removeCallbacks(save);
+        save.run();
+        flushEditor = null;
+        refresh();
+      });
+      flushEditor = save;
       dialog.show();
+      if (!pending.isEmpty()) save.run();
     } catch (Exception e) {
       error(e);
     }
+  }
+
+  private void exportItem(JSONObject item) {
+    exporting = item;
+    boolean note = "note".equals(item.optString("kind"));
+    startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+        .setType(note ? "text/markdown" : item.optString("mime","application/octet-stream"))
+        .putExtra(Intent.EXTRA_TITLE, note ? item.optString("title") + ".md" : item.optString("filename")), EXPORT_ITEM);
+  }
+
+  private void linkItem(EditText body, JSONObject note) {
+    try {
+      List<JSONObject> targets = new ArrayList<>();
+      for (JSONObject candidate : app.store.items())
+        if (!candidate.optBoolean("trashed") && !candidate.optString("id").equals(note.optString("id"))) targets.add(candidate);
+      if (targets.isEmpty()) { message("Import or create another item first."); return; }
+      boolean[] picked = new boolean[targets.size()];
+      String[] titles = new String[targets.size()];
+      for (int i=0; i<targets.size(); i++) titles[i] = targets.get(i).optString("title");
+      int from = Math.max(0, body.getSelectionStart()), to = Math.max(from, body.getSelectionEnd());
+      new AlertDialog.Builder(this).setTitle("Link Atlas items")
+          .setMultiChoiceItems(titles, picked, (dialog, index, checked) -> picked[index] = checked)
+          .setNegativeButton("Cancel", null)
+          .setPositiveButton("Insert", (dialog, which) -> {
+            StringBuilder links = new StringBuilder();
+            for (int i=0; i<targets.size(); i++) if (picked[i]) {
+              JSONObject target = targets.get(i);
+              links.append("\n");
+              if (target.optString("mime").startsWith("image/")) links.append("!");
+              links.append("[").append(target.optString("title").replace("]", "").replace("[", ""))
+                  .append("](atlas:").append(target.optString("id")).append(")\n");
+            }
+            if (links.length() > 0) body.getText().replace(from, to, links.toString());
+          }).show();
+    } catch (Exception failed) { error(failed); }
+  }
+
+  private void readNote(JSONObject item, String text) {
+    LinearLayout blocks = new LinearLayout(this);
+    blocks.setOrientation(LinearLayout.VERTICAL);
+    blocks.setPadding(dp(16), 0, dp(16), dp(12));
+    ScrollView scroll = new ScrollView(this);
+    scroll.addView(blocks);
+    AlertDialog dialog = new AlertDialog.Builder(this).setTitle(item.optString("title"))
+        .setView(scroll).setPositiveButton("Done",null).create();
+    java.util.regex.Pattern links = java.util.regex.Pattern.compile("(!?)\\[([^\\]]*)\\]\\(atlas:([a-fA-F0-9-]{36})\\)");
+    boolean code = false;
+    for (String line : text.split("\n", -1)) {
+      if (line.startsWith("```")) { code = !code; continue; }
+      java.util.regex.Matcher link = links.matcher(line);
+      if (!code && link.find()) {
+        try {
+          JSONObject target = app.store.get(link.group(3));
+          if (target.optBoolean("trashed")) throw new IOException("Unavailable");
+          if ("!".equals(link.group(1)) && target.optString("mime").startsWith("image/")) {
+            ImageView image = new ImageView(this);
+            image.setContentDescription(target.optString("title"));
+            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            blocks.addView(image, new LinearLayout.LayoutParams(-1, dp(190)));
+            loadImage(target, image, 1024);
+          }
+          blocks.addView(button(target.optString("title"), () -> {
+            dialog.dismiss();
+            if (flushEditor != null) flushEditor.run();
+            connections(target);
+          }));
+        } catch (Exception missing) { blocks.addView(label(link.group(2) + " (unavailable)",14,muted)); }
+      } else {
+        String stripped = code ? line : line.replaceFirst("^#{1,6} +", "").replaceFirst("^[-*] ", "• ");
+        TextView row = label(stripped, !code && line.startsWith("# ") ? 22 : !code && line.startsWith("##") ? 18 : 15, Color.WHITE);
+        if (code) row.setTypeface(android.graphics.Typeface.MONOSPACE);
+        blocks.addView(row);
+      }
+    }
+    dialog.show();
+  }
+
+  private void connections(JSONObject item) {
+    try {
+      String id = item.optString("id");
+      JSONArray outbound = item.optJSONArray("relations");
+      List<JSONObject> found = new ArrayList<>();
+      List<String> labels = new ArrayList<>();
+      for (JSONObject candidate : app.store.items()) {
+        String targetId = candidate.optString("id");
+        if (id.equals(targetId) || candidate.optBoolean("trashed")) continue;
+        boolean outgoing = item.optString("body").contains("atlas:" + targetId) || linked(outbound, targetId);
+        boolean incoming = candidate.optString("body").contains("atlas:" + id) || linked(candidate.optJSONArray("relations"), id);
+        if (outgoing || incoming) {
+          found.add(candidate);
+          labels.add((outgoing ? "→ " : "← ") + candidate.optString("title"));
+        }
+      }
+      AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Connections · " + item.optString("title"))
+          .setPositiveButton("Done", null);
+      if (found.isEmpty()) dialog.setMessage("No connected items yet.");
+      else dialog.setItems(labels.toArray(new String[0]), (view, index) -> details(found.get(index)));
+      dialog.show();
+    } catch (Exception failed) { error(failed); }
+  }
+
+  private boolean linked(JSONArray edges, String target) {
+    if (edges != null) for (int i=0; i<edges.length(); i++) {
+      JSONObject edge = edges.optJSONObject(i);
+      if (edge != null && target.equals(edge.optString("target"))) return true;
+    }
+    return false;
+  }
+
+  private void revisionHistory(JSONObject item) {
+    try {
+      List<JSONObject> history = app.store.history(item.getString("id"));
+      String[] revisions = new String[history.size()];
+      for (int i=0; i<history.size(); i++)
+        revisions[i] = "v" + history.get(i).optInt("revision") + " · " + history.get(i).optString("historyAction");
+      new AlertDialog.Builder(this).setTitle("Revision history").setNegativeButton("Done", null)
+          .setItems(revisions, (dialog, index) -> {
+            if (index == 0) return;
+            new AlertDialog.Builder(this).setTitle("Restore " + revisions[index] + "?")
+                .setMessage("Atlas will save it as a new revision.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Restore", (view, which) -> {
+                  try { details(app.store.restore(item.optString("id"), history.get(index).optInt("revision"), item.optInt("revision"))); }
+                  catch (Exception failed) { error(failed); }
+                }).show();
+          }).show();
+    } catch (Exception failed) { error(failed); }
   }
 
   private String join(JSONArray a) {
@@ -674,6 +1185,16 @@ public final class MainActivity extends Activity {
         () -> {
           try {
             String path = app.store.blob(hash).getPath();
+            Bitmap bitmap;
+            if (item.optString("mime").startsWith("video/")) {
+              android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
+              try {
+                retriever.setDataSource(path);
+                bitmap = android.os.Build.VERSION.SDK_INT >= 27
+                    ? retriever.getScaledFrameAtTime(250_000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, size, size)
+                    : retriever.getFrameAtTime(250_000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+              } finally { retriever.release(); }
+            } else {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(path, options);
@@ -681,7 +1202,8 @@ public final class MainActivity extends Activity {
             while (options.outWidth / options.inSampleSize > size * 2
                 || options.outHeight / options.inSampleSize > size * 2) options.inSampleSize *= 2;
             options.inJustDecodeBounds = false;
-            Bitmap bitmap = BitmapFactory.decodeFile(path, options);
+            bitmap = BitmapFactory.decodeFile(path, options);
+            }
             if (bitmap != null) {
               thumbnails.put(key, bitmap);
               runOnUiThread(
@@ -713,22 +1235,22 @@ public final class MainActivity extends Activity {
       card.setOrientation(LinearLayout.VERTICAL);
       card.setBackgroundColor(panel);
       card.setPadding(dp(12), dp(12), dp(12), dp(12));
-      if (item.optString("mime").startsWith("image/") && item.optString("kind").equals("asset")) {
+      if ((item.optString("mime").startsWith("image/") || item.optString("mime").startsWith("video/")) && item.optString("kind").equals("asset")) {
         ImageView image = new ImageView(MainActivity.this);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setContentDescription(item.optString("title"));
-        card.addView(image, new LinearLayout.LayoutParams(-1, dp(112)));
+        card.addView(image, new LinearLayout.LayoutParams(-1, dp(listView ? 48 : 112)));
         loadImage(item, image, 256);
       } else {
         TextView sample =
             label(
                 item.optString("kind").equals("note")
                     ? item.optString("body")
-                    : item.optString("mime"),
+                    : "folder".equals(item.optString("kind")) ? "Folder" : item.optString("mime"),
                 12,
                 muted);
         sample.setMaxLines(5);
-        card.addView(sample, new LinearLayout.LayoutParams(-1, dp(112)));
+        card.addView(sample, new LinearLayout.LayoutParams(-1, dp(listView ? 48 : 112)));
       }
       TextView title = label(item.optString("title"), 14, Color.WHITE);
       title.setSingleLine();
