@@ -1,0 +1,42 @@
+name: Publish Chrome preview downloads
+
+on:
+  push:
+    branches: [release/chrome-preview]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Atlas-*
+          path: downloads
+          merge-multiple: true
+          run-id: 44325433511
+          github-token: ${{ github.token }}
+      - name: Publish verified Windows and Chrome downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.8.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            exit 0
+          fi
+          cd downloads
+          sha256sum Atlas-Capture-0.1.0.zip Atlas-0.8.0-win-x64.exe > SHA256SUMS.txt
+          cat > preview-notes.md <<'EOF'
+          Use the Windows installer with Atlas Capture for Chrome. Both files passed the Atlas 0.8.0 release checks.
+
+          The Mac installers are being built separately for the Atlas 0.8.0 release. Look for [Atlas 0.8.0 on GitHub Releases](https://github.com/Kalyan0540/Asset-Management/releases) before setting up the extension on a Mac.
+
+          [Install and pair Atlas Capture](https://github.com/Kalyan0540/Asset-Management/blob/v0.8.0/docs/CHROME_CAPTURE.md)
+          EOF
+          gh release create chrome-v0.1.0 Atlas-Capture-0.1.0.zip Atlas-0.8.0-win-x64.exe SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target b55bf8884ec212bb84ac26f88fa3c2ef79cb465c \
+            --title 'Atlas Capture 0.1.0 — Chrome and Windows preview' --prerelease --latest=false \
+            --notes-file preview-notes.md
