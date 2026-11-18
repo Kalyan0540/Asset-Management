@@ -19,10 +19,12 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { z, ZodError } from 'zod';
 import { Library, LibraryError } from './library.ts';
-import { patchSchema } from '../shared/model.ts';
+import { names, patchSchema } from '../shared/model.ts';
 import { LocalAI } from './ai.ts';
 
 const MAX_JSON = 2_000_000;
+const tagName = z.string().trim().min(1).max(80);
+const tagChange = z.object({ from: tagName, to: tagName }).strict();
 import { previewTypes } from './media.ts';
 
 const json = (res: ServerResponse, status: number, data: unknown) => {
@@ -165,16 +167,49 @@ export function createLibraryServer(options: {
           library.deleteSmartFolder(z.string().uuid().parse(smartPath[1]));
           return json(res, 200, { ok: true });
         }
-        if (url.pathname === '/api/tag-groups' && req.method === 'POST') {
+        if (
+          url.pathname === '/api/tag-groups' &&
+          (req.method === 'POST' || req.method === 'PATCH')
+        ) {
           const input = z
             .object({
-              name: z.string().trim().min(1).max(80),
-              tags: z.array(z.string().trim().min(1).max(80)).max(100),
+              name: tagName,
+              tags: names,
+              previousName: tagName.optional(),
+              createOnly: z.boolean().optional(),
+              merge: z.boolean().optional(),
             })
             .strict()
             .parse(await body(req));
-          library.setTagGroup(input.name, [...new Set(input.tags)]);
+          if (req.method === 'PATCH')
+            library.renameTagGroup(
+              tagName.parse(input.previousName),
+              input.name,
+              input.tags,
+              input.merge,
+            );
+          else {
+            if (input.createOnly && library.tagGroups().some((group) => group.name === input.name))
+              throw new LibraryError(409, 'A tag group already uses this name.');
+            library.setTagGroup(input.name, input.tags);
+          }
           return json(res, 200, { ok: true });
+        }
+        if (url.pathname === '/api/tag-groups' && req.method === 'DELETE') {
+          const { name } = z
+            .object({ name: tagName })
+            .strict()
+            .parse(await body(req));
+          library.deleteTagGroup(name);
+          return json(res, 200, { ok: true });
+        }
+        if (url.pathname === '/api/tags/change/preview' && req.method === 'POST')
+          return json(res, 200, library.previewTagChange(tagChange.parse(await body(req))));
+        if (url.pathname === '/api/tags/change' && req.method === 'POST') {
+          const { key, ...change } = tagChange
+            .extend({ key: z.string().regex(/^[a-f0-9]{64}$/) })
+            .parse(await body(req));
+          return json(res, 200, library.changeTag(change, key, actor));
         }
         if (url.pathname === '/api/eagle/folder-repair' && req.method === 'GET')
           return json(res, 200, library.eagleFolderRepair());

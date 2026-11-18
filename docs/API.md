@@ -11,6 +11,11 @@ The service listens on `127.0.0.1:3210` by default. All `/api` endpoints except 
 | `POST /api/import?name=photo.png` | Raw bytes with `Content-Type: application/octet-stream`. Default limit: 2 GiB per file. Returns a new asset with a content hash. Each import creates a logical record; identical bytes share one blob. |
 | `PATCH /api/items/:id` | JSON with mandatory `expectedRevision` and only allowed changed fields: title, description, tags, collections, relations, body, favorite, trashed. `body` is valid only for notes. |
 | `POST /api/batch` | Array of `{ "id": "uuid", "patch": { "expectedRevision": 1, "tags": ["reference"] } }`; up to 500 distinct items. Every mutation commits together or none do. |
+| `POST /api/tags/change/preview` | `{ "from": "draft", "to": "reference" }` returns affected counts and a review key. |
+| `POST /api/tags/change` | The same `from` and `to`, with `key` from the preview. Updates current tags, groups and exact smart rules in one transaction. If the review is stale, returns 409. |
+| `POST /api/tag-groups` | `{ "name": "Projects", "tags": ["reference"], "createOnly": true }` creates a group or reports a name conflict. Omitting `createOnly` retains upsert behavior. |
+| `PATCH /api/tag-groups` | `previousName`, `name`, `tags` and optional `merge`. Explicit `merge: true` combines the submitted tags with the existing destination group. |
+| `DELETE /api/tag-groups` | `{ "name": "Projects" }` removes the group. Item tags stay in place. |
 | `GET /api/ai/models` | Reports locally installed Ollama models at loopback port 11434. |
 | `GET /api/ai/jobs` | Recent persisted AI proposal records and states. |
 | `POST /api/ai/jobs` | `{ "itemId": "uuid", "model": "installed-model-name" }`; creates a suggestion without changing the item. |

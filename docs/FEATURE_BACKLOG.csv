@@ -15,7 +15,7 @@ F013,Import,Desktop watched-folder import,R1,M1,F012;F011,Settled file copies im
 F014,Import,Exact duplicate detection,R1,M1,F010,Reuse or separate logical item shares bytes without losing source information,E03,Prototype partial - see IMPLEMENTATION_STATUS.md
 F015,Organization,Nested collections and multiple membership,R1,M1,F011,Removing one membership does not delete another membership or original,E02;E12,Prototype partial - see IMPLEMENTATION_STATUS.md
 F016,Organization,Tags groups recent and favorite tags,R1,M1,F011,Tags and groups persist and queries return correct memberships,E13;E14;E20,Prototype partial - see IMPLEMENTATION_STATUS.md
-F017,Organization,Tag rename merge and undo,R1,M1,F016,Affected references update and a reversible history entry is recorded,E13,Planned
+F017,Organization,Tag rename merge and undo,R1,M1,F016,Affected references update and a reversible history entry is recorded,E13,Partial
 F018,Organization,Metadata editing and ratings,R1,M1,F011,Editable title source description and ratings retain revisions,E11,Prototype partial - see IMPLEMENTATION_STATUS.md
 F019,Organization,Bulk edits with mixed-value states,R1,M1,F015;F016;F018,Add remove and replace behave distinctly and batch undo restores state,E02,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F020,Automation,Deterministic collection/type/source tagging rules,R1,M1,F016;F011,Rule execution is idempotent and distinguishable from AI suggestions,E01,Planned
@@ -104,7 +104,7 @@ F102,Browsers,Edge and Firefox packaging,R2,Post-R1,F063,Each browser passes cap
 F103,Sharing,Read-only revocable gallery links,R2,Post-R1,F049;F053,Only explicitly published item set visible and revocation ends access,Proposed,Planned
 F104,Migration,Eaglepack and expanded Obsidian import,R2,Post-R1,F081;F039,Unsupported constructs reported with original payload preserved,E17;O01,Planned
 F105,Portability,Optional Git metadata and note export,R2,Post-R1,F048,Export is readable and excludes secrets caches and unconfigured large binaries,P08,Planned
-F106,Organization,Cross-library search merge and referenced files,R2,Post-R1,F009;F033;F048,Missing paths and duplicate identities are recoverable and explicit,Proposed,Planned
+F106,Organization,Cross-library search merge and referenced files,R2,Post-R1,F009;F033;F048,Missing paths and duplicate identities are recoverable and explicit,Proposed,Partial
 F107,Collaboration,Multi-user editing permissions and review,Later,Separate-scope,F085;F077,Requires a separate team conflict authorization and administration specification,E18,Planned
 F108,Extensibility,Third-party plugins and marketplace,Later,Separate-scope,F079,Requires sandbox versioning permissions and review design; not Eagle binary compatibility,E04,Planned
 F109,Platforms,iOS Safari and desktop Linux certification,Later,Separate-scope,F082;F102,Independent platform gates and distribution requirements defined,Proposed,Planned

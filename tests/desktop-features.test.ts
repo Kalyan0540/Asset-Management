@@ -10,6 +10,58 @@ import { Library } from '../server/library.ts';
 import { createBackup, restoreBackup } from '../server/backup.ts';
 import { LocalAI } from '../server/ai.ts';
 
+test('tag changes update library references atomically and keep past revisions', () => {
+  const root = mkdtempSync(join(tmpdir(), 'atlas-tag-'));
+  const db = new Library(root);
+  try {
+    const a = db.createNote({ title: 'A' });
+    const b = db.createNote({ title: 'B' });
+    db.patch(a.id, { expectedRevision: 1, tags: ['old', 'keep'] });
+    db.patch(b.id, { expectedRevision: 1, tags: ['old'], trashed: true });
+    db.setTagGroup('First', ['old']);
+    db.setTagGroup('Second', ['keep', 'other']);
+    const folder = db.saveSmartFolder({
+      name: 'Tag rules',
+      match: 'any',
+      addTag: 'old',
+      rules: [
+        { field: 'tag', operator: 'is', value: 'OLD' },
+        { field: 'tag', operator: 'contains', value: 'old' },
+      ],
+    });
+    const change = { from: 'old', to: 'keep' };
+    const preview = db.previewTagChange(change);
+    assert.deepEqual(
+      [preview.items, preview.trashed, preview.groups, preview.smartFolders, preview.merge],
+      [2, 1, 1, 1, true],
+    );
+    db.patch(a.id, { expectedRevision: 2, description: 'Made after review' });
+    assert.throws(() => db.changeTag(change, preview.key, 'ui'), /changed/);
+    assert.deepEqual(db.get(a.id).tags, ['old', 'keep']);
+    db.changeTag(change, db.previewTagChange(change).key, 'ui');
+    assert.deepEqual(db.get(a.id).tags, ['keep']);
+    assert.deepEqual(db.get(b.id).tags, ['keep']);
+    assert.equal(db.history(a.id)[0].action, 'merge tag');
+    assert.deepEqual(db.tagGroups()[0].tags, ['keep']);
+    assert.equal(db.smartFolders()[0].id, folder.id);
+    assert.equal(db.smartFolders()[0].addTag, 'keep');
+    assert.deepEqual(
+      db.smartFolders()[0].rules.map((rule) => rule.value),
+      ['keep', 'old'],
+    );
+    assert.throws(() => db.renameTagGroup('First', 'Second', ['keep']), /already/);
+    db.renameTagGroup('First', 'Second', ['keep'], true);
+    assert.deepEqual(db.tagGroups(), [{ name: 'Second', tags: ['keep', 'other'] }]);
+    db.renameTagGroup('Second', 'Renamed', ['keep', 'other']);
+    db.deleteTagGroup('Renamed');
+    assert.deepEqual(db.tagGroups(), []);
+    assert.deepEqual(db.restore(a.id, 3, 4).tags, ['old', 'keep']);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('batch edits commit together and a stale item rolls back every item', () => {
   const root = mkdtempSync(join(tmpdir(), 'atlas-batch-')),
     db = new Library(root);

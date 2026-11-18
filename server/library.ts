@@ -11,6 +11,7 @@ import {
   type ItemPatch,
   type Collection,
   type HistoryEntry,
+  type TagChange,
 } from '../shared/model.ts';
 
 export class LibraryError extends Error {
@@ -246,6 +247,112 @@ export class Library {
         'INSERT INTO tag_groups VALUES(?,?) ON CONFLICT(name) DO UPDATE SET data=excluded.data',
       )
       .run(name, JSON.stringify(tags));
+  }
+  renameTagGroup(from: string, name: string, tags: string[], merge = false) {
+    return this.transaction(() => {
+      const groups = this.tagGroups();
+      if (!groups.some((group) => group.name === from))
+        throw new LibraryError(404, 'This tag group no longer exists.');
+      const destination = groups.find((group) => group.name === name && name !== from);
+      if (destination && !merge) throw new LibraryError(409, 'A tag group already uses this name.');
+      if (merge && !destination)
+        throw new LibraryError(409, 'The destination tag group no longer exists.');
+      const combined = [...new Set([...(destination?.tags ?? []), ...tags])];
+      if (combined.length > 100)
+        throw new LibraryError(400, 'A tag group can have up to 100 tags.');
+      this.deleteTagGroup(from);
+      this.setTagGroup(name, combined);
+    });
+  }
+  deleteTagGroup(name: string) {
+    this.db.prepare('DELETE FROM tag_groups WHERE name=?').run(name);
+  }
+  private planTagChange({ from, to }: TagChange) {
+    if (from === to) throw new LibraryError(400, 'Enter a different tag name.');
+    const allItems = this.list();
+    const allGroups = this.tagGroups();
+    const allFolders = this.smartFolders();
+    // Smart folder comparisons are case-insensitive, while tag names are case-sensitive.
+    const sameRule = (value: string) => value.toLowerCase() === from.toLowerCase();
+    const hasOtherSpelling =
+      [...allItems, ...allGroups].some((entry) =>
+        entry.tags.some((tag) => tag !== from && sameRule(tag)),
+      ) ||
+      allFolders.some(
+        (folder) => folder.addTag && folder.addTag !== from && sameRule(folder.addTag),
+      );
+    const exactRule = (rule: SmartFolder['rules'][number]) =>
+      !hasOtherSpelling &&
+      rule.field === 'tag' &&
+      rule.operator !== 'contains' &&
+      sameRule(rule.value);
+    const items = allItems.filter((item) => item.tags.includes(from));
+    const groups = allGroups.filter((group) => group.tags.includes(from));
+    const folders = allFolders.filter(
+      (folder) => folder.addTag === from || folder.rules.some(exactRule),
+    );
+    const merge =
+      [...allItems, ...allGroups].some((entry) => entry.tags.includes(to)) ||
+      allFolders.some((folder) => folder.addTag === to);
+    const preview = {
+      from,
+      to,
+      key: createHash('sha256')
+        .update(
+          JSON.stringify({
+            from,
+            to,
+            items: items.map(({ id, revision }) => [id, revision]),
+            groups,
+            folders,
+            merge,
+            hasOtherSpelling,
+          }),
+        )
+        .digest('hex'),
+      items: items.length,
+      trashed: items.filter((item) => item.trashed).length,
+      groups: groups.length,
+      smartFolders: folders.length,
+      merge,
+    };
+    return { preview, items, groups, folders, exactRule };
+  }
+  previewTagChange(change: TagChange) {
+    return this.planTagChange(change).preview;
+  }
+  changeTag(change: TagChange, key: string, actor: string) {
+    return this.transaction(() => {
+      const { preview, items, groups, folders, exactRule } = this.planTagChange(change);
+      if (preview.key !== key)
+        throw new LibraryError(409, 'The library changed. Review the tag change again.');
+      const replace = (tags: string[]) => [
+        ...new Set(tags.map((tag) => (tag === change.from ? change.to : tag))),
+      ];
+      const updatedAt = new Date().toISOString();
+      for (const item of items) {
+        this.save(
+          { ...item, tags: replace(item.tags), updatedAt, revision: item.revision + 1 },
+          preview.merge ? 'merge tag' : 'rename tag',
+          actor,
+        );
+      }
+      for (const group of groups) this.setTagGroup(group.name, replace(group.tags));
+      for (const folder of folders) {
+        const { id, ...data } = folder;
+        this.saveSmartFolder(
+          {
+            ...data,
+            addTag: data.addTag === change.from ? change.to : data.addTag,
+            rules: data.rules.map((rule) =>
+              exactRule(rule) ? { ...rule, value: change.to } : rule,
+            ),
+          },
+          id,
+        );
+      }
+      return preview;
+    });
   }
   private save(item: Item, action: string, actor: string) {
     this.db

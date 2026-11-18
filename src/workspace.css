@@ -735,6 +735,16 @@
   flex-wrap: wrap;
   padding: 14px 0;
 }
+.tag-entry,
+.tag-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tag-dialog-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
 .workspace-dialog {
   border: 1px solid var(--border);
   padding: 16px;

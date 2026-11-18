@@ -1,6 +1,12 @@
-# Implementation status — Atlas 0.5 desktop and Android preview
+# Implementation status — Atlas 0.6 desktop and Android preview
 
 18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
+
+## New in 0.6
+
+- Merge two Atlas libraries into a verified new copy. The second library's nested folders sit under a named branch. Originals, item revisions, relations, Markdown links and embeds, Trash, tag groups and smart folder definitions are carried forward. Distinct entries share original bytes when their hashes match. The merge copies catalog data from both libraries and carries the current library's auxiliary data. Source-specific import reports and pending AI jobs remain in the source.
+- Review and apply a library-wide tag rename or merge from All Tags. Item revisions, tag groups, unambiguous exact tag rules and automatic tag actions follow the change. Substring rules keep their original expressions. Edit, merge or delete tag groups. To undo an item's tag change, restore its earlier revision. A single command to undo the entire operation is still pending.
+- Open Google Lens or TinEye from image actions and use a temporary local image copy. The user uploads the file on the provider's website. AVIF search copies are rendered as PNG on the device.
 
 ## New in 0.5
 
@@ -38,7 +44,7 @@ See [Getting Started](GETTING_STARTED.md) for nontechnical installation instruct
 
 ## Testing
 
-Local checks cover formatting, TypeScript/production build, fourteen integration tests across persistence, conflicts, import/export, backup/restore, bulk transactions, AI review and real MCP stdio clients. Browser tests include the original desktop/mobile-size workflows plus bulk edits and the larger preview. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs repeat the checks and additionally test the packaged application on macOS/Windows, including native backup/restore and a real MCP client launched through the bundled runtime.
+Local checks cover formatting, the TypeScript and production build, and integration tests for persistence, conflicts, import/export, backup/restore, bulk transactions, merge integrity, AI review and real MCP stdio clients. Browser tests cover the desktop and mobile-size workflows, tag change review, and the reverse-image chooser. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs also test the packaged application on macOS and Windows.
 
 AI tests use a deterministic local HTTP model fixture. They establish protocol, review and integrity behavior; they do not establish real-model caption accuracy or hardware performance. An installed Ollama vision model is needed to analyze actual pictures. No hosted inference is enabled by default.
 
@@ -52,7 +58,7 @@ AI tests use a deterministic local HTTP model fixture. They establish protocol, 
 | Migration | Real-world Eagle fixture validation, additional layouts/.eaglepack support and incremental merge; richer Obsidian import; import Markdown assets as editable notes |
 | Knowledge tools | External Markdown reconciliation, autosaved drafts, rendered editing, wiki-link resolution/backlinks, embeds, custom property schemas, independent records, formulas and rollups |
 | AI | Provider credentials, hosted adapters, model installation, persisted work queue/resume, OCR, embeddings, visual similarity, controlled-vocabulary rules and evaluation sets |
-| Organization/media | Folder moves and merging, tag merge and rename, richer filter operators, EXIF, generated video posters, thumbnails/proxies, and specialist formats |
+| Organization/media | Folder moves and merging within a library, whole-operation tag undo, cross-library search, richer filter operators, EXIF, generated video posters, thumbnails/proxies, and specialist formats |
 | Scale | Indexed/paginated queries, virtualized grid, 50,000-item and multi-GB media benchmarking |
 | Security/release | Per-agent scopes, key recovery, tested migrations, updater, verified publisher signing, Apple notarization and long-term acceptance testing |
 

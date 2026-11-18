@@ -10,9 +10,9 @@ Open [Atlas downloads](https://github.com/Kalyan0540/Asset-Management/releases) 
 
 | Your computer | File to choose |
 |---|---|
-| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.5.1-mac-arm64.dmg` |
-| Mac with an Intel processor | `Atlas-0.5.1-mac-x64.dmg` |
-| Windows computer with an Intel/AMD processor | `Atlas-0.5.1-win-x64.exe` |
+| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.6.0-mac-arm64.dmg` |
+| Mac with an Intel processor | `Atlas-0.6.0-mac-x64.dmg` |
+| Windows computer with an Intel/AMD processor | `Atlas-0.6.0-win-x64.exe` |
 
 To check your Mac, click the **Apple menu → About This Mac**. “Chip: Apple …” means use the Apple chip download. “Processor: Intel …” means use the Intel download.
 
@@ -47,6 +47,12 @@ Your library is saved automatically on this computer as you import files or clic
 - Use the **Export** menu for selected originals or Markdown and catalog JSON. The native selected-files export asks where to save, and appends numbers when a name already exists. Use a full backup for transfer or recovery.
 - In the sidebar, **Repair Eagle folders…** previews matching paths from older Eagle imports before changing their hierarchy. Unmatched path names remain in place. Take a library backup first if you want an independent recovery copy.
 - **Smart Folders** remember filters. Optional import actions can add a tag or folder membership to future matching desktop imports. Review the change in the item's revision history.
+- In **All Tags**, click the pencil beside a tag. Enter a new name to rename it, or enter an existing tag to combine them. **Review changes** shows which items, tag groups and smart folders will be affected. Edit a tag group to rename it, combine it with another group by entering that group's name, or remove it.
+- Right-click a PNG, JPEG, GIF, WebP or AVIF image and choose **Search web by image**. Pick Google Lens or TinEye. Atlas prepares a temporary image copy and opens your browser. To share that copy with the provider, choose **Search by image → Upload a file** on Google or **Upload** on TinEye. [Google Lens help](https://support.google.com/websearch/answer/1325808) · [TinEye help](https://tineye.com/how)
+
+## Combine two Atlas libraries
+
+Open the first library and choose **Library → Merge Libraries…**. Select the second Atlas library folder, then choose a location for the combined copy. Review the contents before creating it. The new library preserves nested folders, notes, links and item history. Look for **From [library name]** in the folder tree to find the second library's folders. Duplicate entries stay separately editable and identical file bytes share storage. Both original libraries stay available at their existing locations.
 
 ## 4. Back up your work
 

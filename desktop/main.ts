@@ -12,11 +12,14 @@ import {
 import { basename, extname, join } from 'node:path';
 import { copyFile, mkdtemp, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { createLibraryServer } from '../server/http.ts';
 import { createBackup, restoreBackup } from '../server/backup.ts';
 import { importEagleLibrary } from '../server/eagle.ts';
+import { mergeLibraries } from '../server/merge.ts';
+import { imageSearchExtension, imageSearchProviders } from '../shared/image-search.ts';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -27,6 +30,7 @@ let origin = '';
 let busy = false;
 let eagleImport: AbortController | undefined;
 const smoke = process.argv.includes('--smoke-test');
+const imageSearchFolders = new Set<string>();
 app.setName('Atlas');
 if (process.env.ATLAS_USER_DATA) app.setPath('userData', process.env.ATLAS_USER_DATA);
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -67,9 +71,22 @@ async function openLibrary(path: string) {
   next.server.listen(0, '127.0.0.1');
   await once(next.server, 'listening');
   const previous = service;
+  const previousRoot = root;
+  const previousOrigin = origin;
   service = next;
   root = path;
   origin = `http://127.0.0.1:${(next.server.address() as { port: number }).port}`;
+  try {
+    if (window) await window.loadURL(origin);
+  } catch (error) {
+    service = previous;
+    root = previousRoot;
+    origin = previousOrigin;
+    next.server.close();
+    next.server.closeAllConnections();
+    if ((error as Error & { code?: string }).code === 'ERR_ABORTED') return false;
+    throw error;
+  }
   if (previous) {
     previous.server.close();
     previous.server.closeAllConnections();
@@ -80,7 +97,7 @@ async function openLibrary(path: string) {
     JSON.stringify({ url: origin, library: root }),
     { mode: 0o600 },
   );
-  if (window) await window.loadURL(origin);
+  return true;
 }
 async function operation(fn: () => Promise<void>) {
   if (busy) return;
@@ -121,6 +138,57 @@ async function chooseLibrary(create: boolean) {
     );
   await openLibrary(path);
 }
+async function chooseMerge() {
+  if (!(await confirmSwitch())) return;
+  const current = service!.library;
+  const source = await dialog.showOpenDialog(window!, {
+    title: 'Choose the second Atlas library',
+    properties: ['openDirectory'],
+  });
+  if (source.canceled) return;
+  const target = await dialog.showOpenDialog(window!, {
+    title: 'Choose where the combined library will be saved',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (target.canceled) return;
+  const destination = join(
+    target.filePaths[0],
+    `Merged Atlas ${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 8)}`,
+  );
+  try {
+    const result = await mergeLibraries(current, source.filePaths[0], destination, {
+      review: async (preview) => {
+        const { response } = await dialog.showMessageBox(window!, {
+          type: 'question',
+          title: 'Merge Atlas libraries',
+          message: `Combine “${basename(preview.current)}” with “${basename(preview.source)}”?`,
+          detail: `The second library has ${preview.assets} assets, ${preview.notes} notes (${preview.trashed} items in Trash), ${preview.folders} folders, ${preview.groups} tag groups, ${preview.smartFolders} smart folders, and ${preview.revisions} revisions. It will be copied into a new library at:\n\n${destination}\n\nThe source folder tree will appear under “From ${basename(preview.source)}”. The new library will use both libraries’ import rules.`,
+          buttons: ['Cancel', 'Create combined library'],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        return response === 1;
+      },
+      progress: () => {
+        window?.setProgressBar(2);
+        window?.setTitle('Atlas — Merging libraries');
+      },
+    });
+    if (!result) return;
+    const { response } = await dialog.showMessageBox(window!, {
+      type: 'info',
+      message: 'The combined library is ready.',
+      detail: `${result.path}\n\nEach item from both libraries has its own entry in this copy.`,
+      buttons: ['Done', 'Open combined library'],
+      defaultId: 1,
+      cancelId: 0,
+    });
+    if (response === 1) await openLibrary(result.path);
+  } finally {
+    window?.setProgressBar(-1);
+    window?.setTitle('Atlas');
+  }
+}
 function agentConfiguration() {
   return {
     command: process.execPath,
@@ -157,13 +225,16 @@ ipcMain.handle('atlas:libraries', (event) => {
   checkWindow(event);
   return {
     active: root,
-    entries: recentLibraries().map((path) => ({ path, name: basename(path) })),
+    entries: [...new Set([root, ...recentLibraries()])]
+      .slice(0, 20)
+      .map((path) => ({ path, name: basename(path) })),
   };
 });
 ipcMain.handle('atlas:library-action', async (event, action: string, path?: string) => {
   checkWindow(event);
   if (busy) return;
   if (action === 'reveal') return shell.openPath(root);
+  if (action === 'merge') return operation(chooseMerge);
   if (action === 'new' || action === 'open')
     return operation(() => chooseLibrary(action === 'new'));
   if (
@@ -188,6 +259,53 @@ function exportName(raw: string) {
   if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name = '_' + name;
   return name;
 }
+ipcMain.handle(
+  'atlas:image-search',
+  async (event, id: unknown, provider: unknown, png?: unknown) => {
+    checkWindow(event);
+    if (typeof id !== 'string' || (provider !== 'google' && provider !== 'tineye'))
+      throw new Error('Choose an image and a search provider.');
+    const item = service!.library.get(id);
+    const extension = imageSearchExtension(item.mime);
+    if (item.kind !== 'asset' || !extension || !item.hash || !/^[a-f0-9]{64}$/.test(item.hash))
+      throw new Error('Choose a supported image.');
+    const original = join(root, 'blobs', item.hash);
+    const converted = item.mime === 'image/avif';
+    const limit = 20_000_000;
+    if (
+      converted &&
+      (!ArrayBuffer.isView(png) ||
+        png.byteLength < 8 ||
+        png.byteLength > limit ||
+        !Buffer.from(png.buffer, png.byteOffset, 8).equals(
+          Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+        ))
+    )
+      throw new Error('This AVIF could not be prepared as a PNG under 20 MB.');
+    if (provider === 'tineye' && !converted && item.size > limit)
+      throw new Error('TinEye accepts images up to 20 MB.');
+    const folder = await mkdtemp(join(app.getPath('temp'), 'atlas-search-'));
+    imageSearchFolders.add(folder);
+    const target = join(
+      folder,
+      exportName(basename(item.filename, extname(item.filename))).slice(0, 170) + extension,
+    );
+    try {
+      if (converted && ArrayBuffer.isView(png))
+        await writeFile(target, Buffer.from(png.buffer, png.byteOffset, png.byteLength), {
+          flag: 'wx',
+          mode: 0o600,
+        });
+      else await copyFile(original, target, constants.COPYFILE_EXCL);
+      shell.showItemInFolder(target);
+      await shell.openExternal(imageSearchProviders[provider].url);
+    } catch (error) {
+      rmSync(folder, { recursive: true, force: true });
+      imageSearchFolders.delete(folder);
+      throw error;
+    }
+  },
+);
 ipcMain.handle('atlas:item-action', async (event, id: unknown, action: unknown) => {
   checkWindow(event);
   if (typeof id !== 'string' || (action !== 'open-copy' && action !== 'reveal'))
@@ -270,6 +388,7 @@ function menu() {
       submenu: [
         { label: 'New Library…', click: () => void operation(() => chooseLibrary(true)) },
         { label: 'Open Library…', click: () => void operation(() => chooseLibrary(false)) },
+        { label: 'Merge Libraries…', click: () => void operation(chooseMerge) },
         { label: 'Show Library Folder', click: () => void shell.openPath(root) },
         {
           label: 'Import Eagle Library…',
@@ -540,7 +659,24 @@ app
       );
       const testBackup = join(app.getPath('userData'), `Smoke Backup ${Date.now()}`);
       await createBackup(service!.library, testBackup);
-      await restoreBackup(testBackup, join(app.getPath('userData'), `Smoke Restore ${Date.now()}`));
+      const restored = await restoreBackup(
+        testBackup,
+        join(app.getPath('userData'), `Smoke Restore ${Date.now()}`),
+      );
+      const merged = await mergeLibraries(
+        service!.library,
+        restored,
+        join(app.getPath('userData'), `Smoke Merge ${Date.now()}`),
+        {
+          review: async (preview) => preview.notes === 1,
+        },
+      );
+      if (!merged || merged.collisions !== 1 || !(await openLibrary(merged.path)))
+        throw new Error('Desktop library merge failed');
+      const mergeWorked = await window.webContents.executeJavaScript(
+        `(async()=>{await fetch('/api/session');const data=await (await fetch('/api/library')).json();return data.items.filter(i=>i.title==='Desktop smoke test').length===2;})()`,
+      );
+      if (!mergeWorked) throw new Error('Combined library did not open');
       console.log('DESKTOP_SMOKE_OK');
       const client = new Client({ name: 'packaged-smoke', version: '1.0.0' });
       const transport = new StdioClientTransport({
@@ -577,4 +713,13 @@ app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
   service?.server.close();
   service?.server.closeAllConnections();
+});
+app.on('will-quit', () => {
+  for (const folder of imageSearchFolders) {
+    try {
+      rmSync(folder, { recursive: true, force: true });
+    } catch {
+      // A browser may still have the temporary image open.
+    }
+  }
 });

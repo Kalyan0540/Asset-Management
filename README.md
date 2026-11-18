@@ -8,14 +8,14 @@ The desktop app imports Eagle libraries and includes tags, folders, previews, a 
 
 | Device | Installer |
 |---|---|
-| Mac with Apple chip (M1 or newer) | [Atlas 0.5.1 for Apple chip](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.1/Atlas-0.5.1-mac-arm64.dmg) |
-| Mac with Intel processor | [Atlas 0.5.1 for Intel Mac](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.1/Atlas-0.5.1-mac-x64.dmg) |
-| Windows with Intel or AMD processor | [Atlas 0.5.1 for Windows](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.1/Atlas-0.5.1-win-x64.exe) |
+| Mac with Apple chip (M1 or newer) | [Atlas 0.6.0 for Apple chip](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.6.0/Atlas-0.6.0-mac-arm64.dmg) |
+| Mac with Intel processor | [Atlas 0.6.0 for Intel Mac](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.6.0/Atlas-0.6.0-mac-x64.dmg) |
+| Windows with Intel or AMD processor | [Atlas 0.6.0 for Windows](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.6.0/Atlas-0.6.0-win-x64.exe) |
 | Android 8.0 or newer | [Atlas Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) |
 
 See the [desktop installation guide](docs/GETTING_STARTED.md), the [Android setup guide](docs/ANDROID.md), or [all GitHub releases](https://github.com/Kalyan0540/Asset-Management/releases).
 
-The native **Library** menu creates/opens libraries, shows their location, makes verified backups and restores a backup into a separate library. Your data stays outside the installed application, so replacing the app does not replace the library.
+The native **Library** menu opens libraries, shows their location, makes verified backups, and combines two Atlas libraries into a separate copy. The desktop gallery has a **Search web by image** action, and **All Tags** offers a preview before renaming or merging tags. Your data stays outside the installed application when you update.
 
 ## Run from source (developers)
 
@@ -88,7 +88,7 @@ Use desktop 0.3.0 or later for [Eagle library import](docs/EAGLE_IMPORT.md). The
 ## Project documents
 
 - [Getting started](docs/GETTING_STARTED.md): simple download, install, first-use, backup and AI instructions.
-- [Release notes](docs/RELEASE_NOTES.md): what is included and still pending in 0.2.
+- [Release notes](docs/RELEASE_NOTES.md): new capabilities and download information by version.
 
 - [Implementation status](docs/IMPLEMENTATION_STATUS.md): working capabilities, measured checks, limitations and next gates.
 - [Local API](docs/API.md): endpoints, storage layout, error semantics and agent boundaries.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, FolderOpen, Plus, Search, X } from 'lucide-react';
+import { ChevronDown, FolderOpen, Pencil, Plus, Search, X } from 'lucide-react';
 import {
   filterFields,
   matchesSmartFolder,
@@ -7,7 +7,8 @@ import {
   type SmartFolder,
   type VisualInfo,
 } from '../shared/filters.ts';
-import type { Collection, Item } from '../shared/model.ts';
+import type { Collection, Item, TagChange, TagChangePreview } from '../shared/model.ts';
+import type { ImageSearchProvider } from '../shared/image-search.ts';
 
 declare global {
   interface Window {
@@ -16,11 +17,12 @@ declare global {
       setAppearance: (value: 'system' | 'light' | 'dark') => Promise<void>;
       libraries: () => Promise<{ active: string; entries: { path: string; name: string }[] }>;
       libraryAction: (
-        action: 'open' | 'new' | 'recent' | 'reveal',
+        action: 'open' | 'new' | 'recent' | 'reveal' | 'merge',
         path?: string,
       ) => Promise<unknown>;
       itemAction: (id: string, action: 'open-copy' | 'reveal') => Promise<void>;
       exportOriginals: (ids: string[]) => Promise<{ count: number; skipped: string[] }>;
+      imageSearch: (id: string, provider: ImageSearchProvider, png?: Uint8Array) => Promise<void>;
     };
   }
 }
@@ -35,7 +37,10 @@ export function LibraryPicker({ onError }: { onError: (message: string) => void 
       .then(setData)
       .catch(() => {});
   }, []);
-  async function act(action: 'open' | 'new' | 'recent' | 'reveal', path?: string) {
+  async function act(
+    action: Parameters<NonNullable<Window['atlasDesktop']>['libraryAction']>[0],
+    path?: string,
+  ) {
     try {
       const result = await window.atlasDesktop?.libraryAction(action, path);
       if (action === 'reveal' && typeof result === 'string' && result) onError(result);
@@ -88,6 +93,9 @@ export function LibraryPicker({ onError }: { onError: (message: string) => void 
             </button>
             <button type="button" onClick={() => void act('open')}>
               Open library…
+            </button>
+            <button type="button" onClick={() => void act('merge')}>
+              Merge libraries…
             </button>
             <button type="button" onClick={() => void act('reveal')}>
               Show library folder
@@ -534,20 +542,43 @@ export function TagWorkspace({
   groups,
   openTag,
   onSave,
+  onDelete,
+  reviewTag,
+  applyTag,
 }: {
   items: Item[];
   groups: { name: string; tags: string[] }[];
   openTag: (tag: string) => void;
-  onSave: (group: { name: string; tags: string[] }) => Promise<void>;
+  onSave: (group: {
+    name: string;
+    tags: string[];
+    previousName?: string;
+    merge?: boolean;
+  }) => Promise<void>;
+  onDelete: (name: string) => Promise<void>;
+  reviewTag: (change: TagChange) => Promise<TagChangePreview>;
+  applyTag: (change: TagChange & { key: string }) => Promise<void>;
 }) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState('');
-  const [draft, setDraft] = useState<{ name: string; tags: string[] } | null>(null);
+  const [draft, setDraft] = useState<{
+    name: string;
+    tags: string[];
+    previousName?: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [tag, setTag] = useState<string>();
   const [error, setError] = useState('');
+  const destinationGroup = draft?.previousName
+    ? groups.find((group) => group.name === draft.name.trim() && group.name !== draft.previousName)
+    : undefined;
   const counts = new Map<string, number>();
   for (const item of items)
-    for (const tag of item.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  const all = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+    for (const tag of item.tags) counts.set(tag, (counts.get(tag) ?? 0) + (item.trashed ? 0 : 1));
+  const all = [...new Set([...counts.keys(), ...groups.flatMap((group) => group.tags)])].sort(
+    (a, b) => a.localeCompare(b),
+  );
   const visible = (active ? (groups.find((g) => g.name === active)?.tags ?? []) : all).filter(
     (tag) => tag.toLowerCase().includes(query.toLowerCase()),
   );
@@ -571,6 +602,7 @@ export function TagWorkspace({
           className="text-button"
           onClick={() => {
             setError('');
+            setDeleting(false);
             setDraft({ name: '', tags: [] });
           }}
         >
@@ -581,7 +613,9 @@ export function TagWorkspace({
             className="text-button"
             onClick={() => {
               setError('');
-              setDraft(groups.find((g) => g.name === active)!);
+              setDeleting(false);
+              const group = groups.find((g) => g.name === active);
+              if (group) setDraft({ ...group, previousName: group.name });
             }}
           >
             Edit group
@@ -595,9 +629,19 @@ export function TagWorkspace({
         </label>
         <div className="tag-results">
           {visible.map((tag) => (
-            <button key={tag} className="tag" onClick={() => openTag(tag)}>
-              #{tag} <small>{counts.get(tag) ?? 0}</small>
-            </button>
+            <span className="tag-entry" key={tag}>
+              <button className="tag" onClick={() => openTag(tag)}>
+                #{tag} <small>{counts.get(tag) ?? 0}</small>
+              </button>
+              <button
+                className="icon-button"
+                title="Rename or merge tag"
+                aria-label={`Manage tag ${tag}`}
+                onClick={() => setTag(tag)}
+              >
+                <Pencil size={13} />
+              </button>
+            </span>
           ))}
         </div>
         {visible.length === 0 && (
@@ -606,55 +650,196 @@ export function TagWorkspace({
       </div>
       {draft && (
         <WorkspaceDialog
-          title={active && active === draft.name ? 'Edit tag group' : 'New tag group'}
-          onClose={() => setDraft(null)}
+          title={draft.previousName ? 'Edit tag group' : 'New tag group'}
+          onClose={() => {
+            if (!busy) setDraft(null);
+          }}
         >
           <form
             onSubmit={async (e) => {
               e.preventDefault();
+              setBusy(true);
+              setError('');
               try {
-                await onSave(draft);
-                setActive(draft.name.trim());
+                if (deleting && draft.previousName) {
+                  await onDelete(draft.previousName);
+                  setActive('');
+                } else {
+                  await onSave({ ...draft, merge: !!destinationGroup });
+                  setActive(draft.name.trim());
+                }
                 setDraft(null);
               } catch (e) {
                 setError((e as Error).message);
+              } finally {
+                setBusy(false);
               }
             }}
           >
-            <label>
-              Name{' '}
-              <input
-                required
-                autoFocus
-                maxLength={80}
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              />
-            </label>
-            {all.map((tag) => (
-              <label key={tag} className="check-label">
-                <input
-                  type="checkbox"
-                  checked={draft.tags.includes(tag)}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      tags: e.target.checked
-                        ? [...draft.tags, tag]
-                        : draft.tags.filter((t) => t !== tag),
-                    })
-                  }
-                />
-                {tag}
-              </label>
-            ))}
+            {deleting ? (
+              <p>Delete this group? Its tags will stay on your items.</p>
+            ) : (
+              <>
+                <label>
+                  Name{' '}
+                  <input
+                    required
+                    autoFocus
+                    maxLength={80}
+                    value={draft.name}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  />
+                </label>
+                {all.map((tag) => (
+                  <label key={tag} className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={draft.tags.includes(tag)}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          tags: e.target.checked
+                            ? [...draft.tags, tag]
+                            : draft.tags.filter((t) => t !== tag),
+                        })
+                      }
+                    />
+                    {tag}
+                  </label>
+                ))}
+              </>
+            )}
+            {destinationGroup && !deleting && (
+              <p role="status">
+                This combines the tags selected here with the tags in “{destinationGroup.name}”.
+              </p>
+            )}
             {error && <p role="alert">{error}</p>}
-            <button className="primary" type="submit">
-              Save group
-            </button>
+            <footer className="tag-dialog-actions">
+              {draft.previousName && (
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setDeleting(!deleting);
+                    setError('');
+                  }}
+                >
+                  {deleting ? 'Back' : 'Delete group…'}
+                </button>
+              )}
+              <button className="primary" type="submit" disabled={busy}>
+                {deleting ? 'Delete group' : destinationGroup ? 'Merge groups' : 'Save group'}
+              </button>
+            </footer>
           </form>
         </WorkspaceDialog>
       )}
+      {tag && (
+        <TagChangeDialog
+          from={tag}
+          tags={all}
+          review={reviewTag}
+          apply={applyTag}
+          onClose={() => setTag(undefined)}
+        />
+      )}
     </section>
+  );
+}
+
+function TagChangeDialog({
+  from,
+  tags,
+  review,
+  apply,
+  onClose,
+}: {
+  from: string;
+  tags: string[];
+  review: (change: TagChange) => Promise<TagChangePreview>;
+  apply: (change: TagChange & { key: string }) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [to, setTo] = useState(from);
+  const [preview, setPreview] = useState<TagChangePreview>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  return (
+    <WorkspaceDialog
+      title={`Manage #${from}`}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+    >
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setError('');
+          setBusy(true);
+          try {
+            if (preview) {
+              await apply({ from, to: preview.to, key: preview.key });
+              onClose();
+            } else {
+              setPreview(await review({ from, to }));
+            }
+          } catch (error) {
+            setPreview(undefined);
+            setError((error as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label>
+          Rename or merge into
+          <input
+            required
+            autoFocus
+            disabled={busy}
+            maxLength={80}
+            list="tag-name-options"
+            value={to}
+            onChange={(event) => {
+              setTo(event.target.value);
+              setPreview(undefined);
+              setError('');
+            }}
+          />
+        </label>
+        <datalist id="tag-name-options">
+          {tags
+            .filter((tag) => tag !== from)
+            .map((tag) => (
+              <option key={tag} value={tag} />
+            ))}
+        </datalist>
+        {preview ? (
+          <p role="status">
+            {preview.merge ? 'Merge' : 'Rename'} #{from} {preview.merge ? 'into' : 'to'} #
+            {preview.to} on {preview.items} items
+            {preview.trashed ? ` (${preview.trashed} in Trash)` : ''}, in {preview.groups} tag
+            groups and {preview.smartFolders} smart folders.
+          </p>
+        ) : (
+          <p>
+            Choose an existing tag to combine both. Enter a new name to rename the tag throughout
+            this library.
+          </p>
+        )}
+        {error && <p role="alert">{error}</p>}
+        <footer className="tag-dialog-actions">
+          <button
+            className="primary"
+            type="submit"
+            disabled={busy || !to.trim() || to.trim() === from}
+          >
+            {preview ? (preview.merge ? 'Merge tags' : 'Rename tag') : 'Review changes'}
+          </button>
+        </footer>
+      </form>
+    </WorkspaceDialog>
   );
 }

@@ -1,24 +1,26 @@
 import { backup, DatabaseSync } from 'node:sqlite';
-import { mkdir, cp, readFile, writeFile, rm, rename, access, lstat } from 'node:fs/promises';
+import { mkdir, cp, readFile, writeFile, rm, rename, lstat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { join, dirname, resolve, relative, isAbsolute, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Library } from './library.ts';
 import type { Item } from '../shared/model.ts';
 
-async function digest(path: string) {
+export async function fileDigest(path: string) {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest('hex');
 }
-async function mustNotExist(path: string) {
+export async function findFileEntry(path: string) {
   try {
-    await access(path);
+    return await lstat(path);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  throw new Error('Choose a new folder; existing files will not be overwritten.');
+}
+export async function mustNotExist(path: string) {
+  if (await findFileEntry(path))
+    throw new Error('Choose a new folder; existing files will not be overwritten.');
 }
 function hashes(database: string) {
   const db = new DatabaseSync(database, { readOnly: true });
@@ -58,7 +60,7 @@ export async function createBackup(library: Library, destination: string) {
     for (const hash of manifest.hashes) {
       const target = join(temp, 'blobs', hash);
       await cp(join(library.root, 'blobs', hash), target);
-      if ((await digest(target)) !== hash)
+      if ((await fileDigest(target)) !== hash)
         throw new Error('An original file failed verification. Backup was not completed.');
     }
     await writeFile(
@@ -103,7 +105,7 @@ export async function restoreBackup(source: string, destination: string) {
         throw new Error('The backup contains a link instead of an original file.');
       const target = join(temp, 'blobs', hash);
       await cp(join(source, 'blobs', hash), target);
-      if ((await digest(target)) !== hash)
+      if ((await fileDigest(target)) !== hash)
         throw new Error(
           'A file in this backup is missing or damaged. Your current library has not been changed.',
         );

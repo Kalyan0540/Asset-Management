@@ -1,4 +1,76 @@
 import { test, expect } from '@playwright/test';
+
+test('tag workspace reviews and applies a merge before relabeling items', async ({ page }) => {
+  const stamp = Date.now();
+  const from = `Draft-${stamp}`;
+  const to = `Reference-${stamp}`;
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await page.getByLabel('Note title').fill(`Tag cleanup ${stamp}`);
+  await page.getByLabel('Tags', { exact: true }).fill(`${from}, ${to}`);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await page
+    .getByRole('button', { name: /^All Tags/i })
+    .first()
+    .click();
+  await page.getByRole('button', { name: `Manage tag ${from}` }).click();
+  const dialog = page.getByRole('dialog', { name: `Manage #${from}` });
+  await dialog.getByLabel('Rename or merge into').fill(to);
+  await dialog.getByRole('button', { name: 'Review changes' }).click();
+  await expect(dialog.getByRole('status')).toContainText(`Merge #${from} into #${to} on 1 items`);
+  await expect(page.locator('.tag-results button.tag').filter({ hasText: from })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Merge tags' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.tag-results button.tag').filter({ hasText: from })).toHaveCount(0);
+  await page.getByRole('button', { name: new RegExp(`#${to}`) }).click();
+  await expect(
+    page.locator('.asset-open').filter({ hasText: `Tag cleanup ${stamp}` }),
+  ).toBeVisible();
+});
+
+test('desktop reverse image search waits for the provider choice and user action', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'atlasDesktop', {
+      value: {
+        appearance: async () => 'system',
+        libraries: async () => ({ active: '/atlas', entries: [] }),
+        imageSearch: async (id: string, provider: string, png?: Uint8Array) =>
+          sessionStorage.setItem(
+            'image-search-test',
+            JSON.stringify({ id, provider, hadPng: !!png }),
+          ),
+      },
+    });
+  });
+  await page.goto('/');
+  const filename = `Search-${Date.now()}.png`;
+  await page.getByLabel('Import files', { exact: true }).setInputFiles({
+    name: filename,
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  });
+  await expect(page.getByLabel('Item title')).toHaveValue(filename);
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await page.getByRole('button', { name: `Actions for ${filename}` }).click();
+  await page.getByRole('button', { name: 'Search web by image…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search web by image' });
+  await dialog.getByLabel('Search provider').selectOption('tineye');
+  expect(await page.evaluate(() => sessionStorage.getItem('image-search-test'))).toBeNull();
+  await dialog.getByRole('button', { name: 'Open TinEye' }).click();
+  await expect(dialog.getByRole('status')).toContainText('Image copy ready');
+  const call = await page.evaluate(() => JSON.parse(sessionStorage.getItem('image-search-test')!));
+  expect(call).toEqual({
+    provider: 'tineye',
+    hadPng: false,
+    id: expect.stringMatching(/^[\da-f-]{36}$/),
+  });
+});
 test('bulk organization, sorting and full-screen preview work together', async ({ page }) => {
   await page.goto('/');
   const title = `Bulk preview ${Date.now()}`;

@@ -8,4 +8,6 @@ contextBridge.exposeInMainWorld('atlasDesktop', {
     ipcRenderer.invoke('atlas:library-action', action, path),
   itemAction: (id: string, action: string) => ipcRenderer.invoke('atlas:item-action', id, action),
   exportOriginals: (ids: string[]) => ipcRenderer.invoke('atlas:export-originals', ids),
+  imageSearch: (id: string, provider: string, png?: Uint8Array) =>
+    ipcRenderer.invoke('atlas:image-search', id, provider, png),
 });

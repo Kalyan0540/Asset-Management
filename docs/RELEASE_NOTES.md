@@ -1,4 +1,12 @@
-# Atlas 0.5.1
+# Atlas 0.6.0
+
+- Choose **Library → Merge Libraries…** to combine two Atlas libraries into a separate copy. The merged library keeps nested folders, original files, item history, note links and relations. Open either source library again from its existing location.
+- In **All Tags**, click the pencil next to a tag to review a rename or merge. Tag groups can also be renamed, combined or removed.
+- Choose **Search web by image** from an image's item menu. Atlas prepares a temporary copy for Google Lens or TinEye. You decide whether to upload it in your browser.
+
+Use **Assets** below to download the installer for your computer. [Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.6.0/docs/GETTING_STARTED.md) · [Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk)
+
+## Atlas 0.5.1
 
 This build preserves the first character typed immediately after inserting a Markdown slash command.
 

@@ -56,5 +56,14 @@ export type LibrarySnapshot = {
   smartFolders?: SmartFolder[];
   tagGroups?: { name: string; tags: string[] }[];
 };
+export type TagChange = { from: string; to: string };
+export type TagChangePreview = TagChange & {
+  key: string;
+  items: number;
+  trashed: number;
+  groups: number;
+  smartFolders: number;
+  merge: boolean;
+};
 export type HistoryEntry = { revision: number; at: string; action: string; actor: string };
 export type ItemPatch = z.input<typeof patchSchema>;

@@ -56,7 +56,8 @@ import {
   TagWorkspace,
   WorkspaceDialog,
 } from './WorkspaceTools';
-import { HoverPeek, InlineVideo, ItemMenu } from './GalleryActions';
+import { HoverPeek, InlineVideo, ItemMenu, ReverseImageDialog } from './GalleryActions';
+import { imageSearchExtension } from '../shared/image-search';
 import { descendantIds } from '../shared/collections';
 import {
   matchesRule,
@@ -759,6 +760,7 @@ function App() {
   const [peek, setPeek] = useState<Item | null>(null);
   const peekTimer = useRef<number | undefined>(undefined);
   const [itemMenu, setItemMenu] = useState<{ item: Item; x: number; y: number } | null>(null);
+  const [imageSearch, setImageSearch] = useState<Item>();
   const [undo, setUndo] = useState<{ id: string; patch: ItemPatch }[]>([]);
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
     const stored = localStorage.getItem('atlas.theme');
@@ -1586,12 +1588,26 @@ function App() {
           </section>
           {scope === 'tags' ? (
             <TagWorkspace
-              items={active}
+              items={library.items}
               groups={library.tagGroups ?? []}
               openTag={(tag) => navigate(`tag:${tag}`)}
               onSave={async (group) => {
-                await api('/tag-groups', 'POST', group);
+                await api(
+                  '/tag-groups',
+                  group.previousName ? 'PATCH' : 'POST',
+                  group.previousName ? group : { ...group, createOnly: true },
+                );
                 await reload();
+              }}
+              onDelete={async (name) => {
+                await api('/tag-groups', 'DELETE', { name });
+                await reload();
+              }}
+              reviewTag={(change) => api('/tags/change/preview', 'POST', change)}
+              applyTag={async (change) => {
+                await api('/tags/change', 'POST', change);
+                await reload();
+                setNotice(`Updated tag #${change.to}`);
               }}
             />
           ) : (
@@ -1981,6 +1997,11 @@ function App() {
           onClose={() => setItemMenu(null)}
           actions={[
             { label: 'Quick Preview', run: () => setPreview(itemMenu.item.id) },
+            ...(window.atlasDesktop &&
+            itemMenu.item.kind === 'asset' &&
+            imageSearchExtension(itemMenu.item.mime)
+              ? [{ label: 'Search web by image…', run: () => setImageSearch(itemMenu.item) }]
+              : []),
             ...(window.atlasDesktop
               ? [
                   {
@@ -2066,6 +2087,9 @@ function App() {
             },
           ]}
         />
+      )}
+      {imageSearch && (
+        <ReverseImageDialog item={imageSearch} onClose={() => setImageSearch(undefined)} />
       )}
       {smart && (
         <SmartEditor
