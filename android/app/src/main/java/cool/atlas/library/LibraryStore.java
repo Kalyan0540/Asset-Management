@@ -27,7 +27,10 @@ public final class LibraryStore implements AutoCloseable {
     if (partials != null) for (File f : partials) if (f.isFile()) f.delete();
     db = SQLiteDatabase.openOrCreateDatabase(new File(root, "catalog.sqlite"), null);
     try {
-      db.execSQL("PRAGMA journal_mode=DELETE");
+      try (Cursor journal = db.rawQuery("PRAGMA journal_mode=DELETE", null)) {
+        if (!journal.moveToFirst() || !"delete".equalsIgnoreCase(journal.getString(0)))
+          throw new IOException("Could not prepare library for safe snapshots");
+      }
       db.execSQL("PRAGMA synchronous=FULL");
       db.execSQL("CREATE TABLE IF NOT EXISTS schema_info(version INTEGER NOT NULL)");
       try (Cursor c = db.rawQuery("SELECT version FROM schema_info", null)) {
