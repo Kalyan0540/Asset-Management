@@ -94,7 +94,7 @@ try {
   const review = await newPage;
   await review.getByRole('checkbox', { name: 'Select Blue sample' }).check();
   await review.getByRole('button', { name: 'Save 1 to Atlas' }).click();
-  await expect(review.getByRole('status')).toContainText('1 saved');
+  await expect(review.locator('#status')).toContainText('1 saved');
   expect(
     library.list().some((item) => item.kind === 'asset' && item.title === 'Blue sample.png'),
   ).toBe(true);
