@@ -430,6 +430,12 @@
   flex: 1;
   cursor: pointer;
 }
+.library-search .types-row input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
 .types-row label small {
   margin-inline-start: auto;
 }

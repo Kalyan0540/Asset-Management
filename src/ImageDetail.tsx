@@ -19,7 +19,8 @@ export function ImageDetail({
   const pointers = useRef(new Map<number, Position>());
   const [transform, setTransform] = useState(reset);
   const [gesturing, setGesturing] = useState(false);
-  const [actualZoom, setActualZoom] = useState(1);
+  const [fit, setFit] = useState<{ width: number; height: number; scale: number }>();
+  const actualZoom = 1 / (fit?.scale ?? 1);
 
   function zoomBy(multiplier: number, point?: Position) {
     setTransform((current) => {
@@ -34,8 +35,24 @@ export function ImageDetail({
   }
 
   function dimensions() {
-    if (image.current?.clientWidth)
-      setActualZoom(image.current.naturalWidth / image.current.clientWidth);
+    const viewportElement = viewport.current;
+    const photo = image.current;
+    if (!viewportElement || !photo?.naturalWidth || !photo.naturalHeight) return;
+    const css = getComputedStyle(viewportElement);
+    const availableWidth =
+      viewportElement.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
+    const availableHeight =
+      viewportElement.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
+    const scale = Math.min(
+      1,
+      Math.max(1, availableWidth) / photo.naturalWidth,
+      Math.max(1, availableHeight) / photo.naturalHeight,
+    );
+    setFit((previous) =>
+      previous?.scale === scale
+        ? previous
+        : { width: photo.naturalWidth * scale, height: photo.naturalHeight * scale, scale },
+    );
   }
 
   useEffect(() => {
@@ -135,6 +152,8 @@ export function ImageDetail({
           src={`/api/items/${item.id}/content`}
           onLoad={dimensions}
           style={{
+            width: fit?.width,
+            height: fit?.height,
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})`,
             transition: gesturing ? 'none' : undefined,
           }}

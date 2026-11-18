@@ -12,7 +12,15 @@ test('the integrated type filter, center image canvas and panel shortcut work to
   await page.goto('/');
   const title = `Detail-${Date.now()}`;
   const pixel = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+    await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 900;
+      canvas.height = 1200;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#1c4087';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL().split(',')[1];
+    }),
     'base64',
   );
   await page.getByLabel('Import files', { exact: true }).setInputFiles([
@@ -35,6 +43,12 @@ test('the integrated type filter, center image canvas and panel shortcut work to
   await tiles.nth(1).press('Enter');
   const detail = page.getByRole('region', { name: 'Image detail' });
   await expect(detail).toBeVisible();
+  const photo = detail.locator('img');
+  await expect(photo).toHaveJSProperty('naturalHeight', 1200);
+  const viewportBounds = await detail.getByLabel('Image canvas').boundingBox();
+  await expect
+    .poll(async () => (await photo.boundingBox())!.height)
+    .toBeLessThanOrEqual(viewportBounds!.height);
   await expect(page.locator('.sidebar')).toBeVisible();
   await expect(page.locator('.inspector')).toBeVisible();
   const readout = detail.locator('output');

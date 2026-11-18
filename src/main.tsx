@@ -1628,7 +1628,9 @@ function App() {
               setImageDetail(false);
               requestAnimationFrame(() =>
                 document
-                  .querySelector<HTMLButtonElement>(`[data-item-id="${item.id}"] .asset-open`)
+                  .querySelector<HTMLButtonElement>(
+                    `[data-item-id="${item.id}"] :is(.asset-open, .cell-button)`,
+                  )
                   ?.focus(),
               );
             }}
