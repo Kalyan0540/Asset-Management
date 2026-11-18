@@ -31,3 +31,12 @@ await build({
 });
 
 await import('./third-party-notices.mjs');
+
+await build({
+  entryPoints: ['desktop/preload.ts'],
+  outfile: 'desktop-build/preload.cjs',
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  external: ['electron'],
+});

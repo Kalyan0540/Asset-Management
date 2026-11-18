@@ -1,0 +1,11 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('atlasDesktop', {
+  appearance: () => ipcRenderer.invoke('atlas:appearance'),
+  setAppearance: (value: string) => ipcRenderer.invoke('atlas:set-appearance', value),
+  libraries: () => ipcRenderer.invoke('atlas:libraries'),
+  libraryAction: (action: string, path?: string) =>
+    ipcRenderer.invoke('atlas:library-action', action, path),
+  itemAction: (id: string, action: string) => ipcRenderer.invoke('atlas:item-action', id, action),
+  exportOriginals: (ids: string[]) => ipcRenderer.invoke('atlas:export-originals', ids),
+});

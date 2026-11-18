@@ -12,6 +12,7 @@ type Metadata = Record<string, unknown>;
 export type EagleReport = {
   format: 'atlas-eagle-import';
   version: 1;
+  folderTreePreserved?: boolean;
   createdAt: string;
   sourceName: string;
   imported: number;
@@ -92,6 +93,7 @@ export async function importEagleLibrary(
   const report: EagleReport = {
     format: 'atlas-eagle-import',
     version: 1,
+    folderTreePreserved: true,
     createdAt: new Date().toISOString(),
     sourceName: source.split(sep).at(-1)!,
     imported: 0,
@@ -105,27 +107,16 @@ export async function importEagleLibrary(
   const warn = (item: string, message: string) => report.issues.push({ item, message });
   try {
     library = new Library(temp);
-    const folders = new Map<string, string>();
-    const paths = new Set<string>();
-    const walk = (values: unknown[], parents: string[] = [], depth = 0) => {
-      if (depth > 100) throw new Error('Eagle folder nesting exceeds the supported limit.');
-      for (const value of values) {
-        const f = object(value),
-          id = string(f.id),
-          name = string(f.name) || 'Untitled';
-        if (!id || folders.has(id)) throw new Error('Duplicate or missing Eagle folder ID.');
-        const path = [...parents, name].join(' / ');
-        const unique = paths.has(path) ? `${path} [${id}]` : path;
-        paths.add(unique);
-        folders.set(id, library!.createCollection(unique).id);
-        if (Array.isArray(f.children)) walk(f.children, [...parents, name], depth + 1);
-      }
-    };
-    walk(root.data.folders);
-    warn(
-      'Library',
-      'Nested folders are represented as full-path collection names. Smart folders, tag groups, ratings, palettes and other Eagle-only properties are preserved in source metadata, not implemented as Atlas features.',
-    );
+    const folders = library.importEagleCollections(root.data.folders);
+    if (
+      ['smartFolders', 'tagsGroups'].some(
+        (key) => Array.isArray(root.data[key]) && root.data[key].length,
+      )
+    )
+      warn(
+        'Library',
+        'Eagle Smart Folder rules and tag group definitions are retained in source metadata.',
+      );
     const seen = new Set<string>();
     for (const entry of entries) {
       options.signal?.throwIfAborted();
@@ -265,6 +256,7 @@ export async function importEagleLibrary(
           relations: [],
           favorite: typeof m.star === 'number' && m.star > 0,
           trashed: m.isDeleted === true,
+          importedAt: now,
           createdAt: date(m.btime, now),
           updatedAt: date(m.modificationTime ?? m.mtime, now),
           filename: asset.kind === 'asset' ? filename : '',

@@ -32,16 +32,38 @@ import {
   Tag,
   Pencil,
   PanelRight,
+  PanelLeft,
+  Sparkles,
+  Clock3,
+  Shuffle,
+  FolderPlus,
+  Pin,
 } from 'lucide-react';
 import cytoscape from 'cytoscape';
 import { useReactTable, getCoreRowModel, flexRender, type ColumnDef } from '@tanstack/react-table';
 import type { Item, ItemPatch, Collection, LibrarySnapshot, HistoryEntry } from '../shared/model';
 import './styles.css';
+import './workspace.css';
 import { BulkBar, Lightbox } from './LibraryTools';
 import { AiPanel } from './AiPanel';
 import { NoteEditor, noteReferences } from './NoteEditor';
 import { Gallery, type GalleryView, type Dimensions } from './Gallery';
-import { ImageProperties } from './ImageProperties';
+import { ImageProperties, imageColors } from './ImageProperties';
+import {
+  LibraryPicker,
+  FilterStrip,
+  SmartEditor,
+  TagWorkspace,
+  WorkspaceDialog,
+} from './WorkspaceTools';
+import { HoverPeek, InlineVideo, ItemMenu } from './GalleryActions';
+import { descendantIds } from '../shared/collections';
+import {
+  matchesRule,
+  matchesSmartFolder,
+  type FilterRule,
+  type SmartFolder,
+} from '../shared/filters';
 
 async function api<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
   const response = await fetch('/api' + path, {
@@ -76,7 +98,13 @@ function ItemIcon({ item, size = 24 }: { item: Item; size?: number }) {
             : File;
   return <Icon size={size} />;
 }
-function Thumbnail({ item, onDimensions }: { item: Item; onDimensions: (d: Dimensions) => void }) {
+function Thumbnail({
+  item,
+  onDimensions,
+}: {
+  item: Item;
+  onDimensions: (d: Dimensions & { colors?: string[] }) => void;
+}) {
   if (item.mime.startsWith('image/'))
     return (
       <img
@@ -87,10 +115,12 @@ function Thumbnail({ item, onDimensions }: { item: Item; onDimensions: (d: Dimen
           onDimensions({
             width: e.currentTarget.naturalWidth,
             height: e.currentTarget.naturalHeight,
+            colors: imageColors(e.currentTarget),
           })
         }
       />
     );
+  if (item.mime.startsWith('video/')) return <InlineVideo item={item} onSize={onDimensions} />;
   if (item.kind === 'note')
     return (
       <div className="note-thumbnail">
@@ -287,6 +317,7 @@ function Inspector({
   onOpen,
   noteReading,
   onNoteReadingChange,
+  onColorFilter,
 }: {
   item: Item;
   items: Item[];
@@ -299,6 +330,7 @@ function Inspector({
   onOpen: (id: string) => void;
   noteReading: boolean;
   onNoteReadingChange: (reading: boolean) => void;
+  onColorFilter: (color: string) => void;
 }) {
   const [draft, setDraft] = useState(item),
     [tags, setTags] = useState(item.tags.join(', ')),
@@ -348,6 +380,8 @@ function Inspector({
         relations,
         ...(item.kind === 'note' ? { body: draft.body } : {}),
         favorite: draft.favorite,
+        rating: draft.rating,
+        sourceUrl: draft.sourceUrl,
       });
     } finally {
       setBusy(false);
@@ -367,7 +401,7 @@ function Inspector({
             <Preview item={item} />
           </div>
         )}
-        <ImageProperties item={item} />
+        <ImageProperties item={item} onFilter={onColorFilter} />
         <div className="detail-type">
           <ItemIcon item={item} size={14} />
           {item.kind === 'note' ? 'MARKDOWN NOTE' : item.mime.split('/')[1].toUpperCase()}
@@ -394,38 +428,130 @@ function Inspector({
           />
         </label>
         <label>
-          Tags
+          Source link{' '}
           <input
-            aria-label="Tags"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder="design, inspiration, research"
+            type="url"
+            aria-label="Source link"
+            placeholder="https://…"
+            value={
+              draft.sourceUrl ??
+              (typeof item.source?.metadata.url === 'string' &&
+              /^https?:\/\//i.test(item.source.metadata.url)
+                ? item.source.metadata.url
+                : '')
+            }
+            onChange={(e) => field('sourceUrl', e.target.value)}
           />
-          <small>Separate tags with commas</small>
         </label>
+        <div className="rating-control" role="group" aria-label="Rating">
+          <span>Rating</span>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              type="button"
+              key={n}
+              aria-label={`Rate ${n} stars`}
+              aria-pressed={n === Number(draft.rating ?? item.source?.metadata.star ?? 0)}
+              onClick={() => field('rating', n === draft.rating ? 0 : n)}
+            >
+              <Star
+                size={15}
+                fill={
+                  n <= Number(draft.rating ?? item.source?.metadata.star ?? 0)
+                    ? 'currentColor'
+                    : 'none'
+                }
+              />
+            </button>
+          ))}
+        </div>
+        <section className="inspector-tags" aria-label="Assigned tags">
+          <label>
+            Tags{' '}
+            <input
+              aria-label="Tags"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="Add tags, separated by commas"
+            />
+          </label>
+          <div className="inspector-chips">
+            {[
+              ...new Set(
+                tags
+                  .split(',')
+                  .map((tag) => tag.trim())
+                  .filter(Boolean),
+              ),
+            ].map((tag) => (
+              <button
+                className="tag"
+                type="button"
+                key={tag}
+                aria-label={`Remove tag ${tag}`}
+                onClick={() =>
+                  setTags(
+                    tags
+                      .split(',')
+                      .map((t) => t.trim())
+                      .filter((t) => t && t !== tag)
+                      .join(', '),
+                  )
+                }
+              >
+                {tag}
+                <X size={12} />
+              </button>
+            ))}
+          </div>
+        </section>
         <fieldset>
-          <legend>Collections</legend>
-          {collections.length === 0 ? (
-            <small>Create a collection in the sidebar.</small>
-          ) : (
-            collections.map((c) => (
-              <label className="check-label" key={c.id}>
-                <input
-                  type="checkbox"
-                  checked={draft.collections.includes(c.id)}
-                  onChange={(e) =>
+          <legend>Folders</legend>
+          <div className="inspector-chips">
+            {collections
+              .filter((c) => draft.collections.includes(c.id))
+              .map((c) => (
+                <button
+                  className="tag"
+                  type="button"
+                  key={c.id}
+                  title={c.name}
+                  aria-label={`Remove folder ${c.name}`}
+                  onClick={() =>
                     field(
                       'collections',
-                      e.target.checked
-                        ? [...draft.collections, c.id]
-                        : draft.collections.filter((id) => id !== c.id),
+                      draft.collections.filter((id) => id !== c.id),
                     )
                   }
-                />
-                <Folder size={14} />
-                {c.name}
-              </label>
-            ))
+                >
+                  {c.title ?? c.name}
+                  <X size={12} />
+                </button>
+              ))}
+          </div>
+          {collections.length === 0 ? (
+            <small>Create a folder in the sidebar.</small>
+          ) : (
+            <details className="folder-membership">
+              <summary>Add or remove folders</summary>
+              {collections.map((c) => (
+                <label className="check-label" key={c.id}>
+                  <input
+                    type="checkbox"
+                    checked={draft.collections.includes(c.id)}
+                    onChange={(e) =>
+                      field(
+                        'collections',
+                        e.target.checked
+                          ? [...draft.collections, c.id]
+                          : draft.collections.filter((id) => id !== c.id),
+                      )
+                    }
+                  />
+                  <Folder size={13} />
+                  {c.name}
+                </label>
+              ))}
+            </details>
           )}
         </fieldset>
         <fieldset>
@@ -518,6 +644,12 @@ function Inspector({
         </button>
       </form>
       <div className="detail-meta">
+        <span>Type</span>
+        <span>
+          {item.kind === 'note' ? 'Markdown' : item.filename.split('.').at(-1)?.toUpperCase()}
+        </span>
+        <span>Imported</span>
+        <span>{item.importedAt ? new Date(item.importedAt).toLocaleString() : '—'}</span>
         <span>Size</span>
         <span>{bytes(item.size)}</span>
         <span>Created</span>
@@ -590,7 +722,7 @@ function App() {
   const [scope, setScope] = useState('all'),
     [query, setQuery] = useState(''),
     [kind, setKind] = useState('all'),
-    [view, setView] = useState<GalleryView | 'table' | 'graph'>('grid'),
+    [view, setView] = useState<GalleryView | 'table' | 'graph'>('justified'),
     [selected, setSelected] = useState<string | null>(null),
     [uploading, setUploading] = useState(''),
     [renaming, setRenaming] = useState<Collection | null>(null),
@@ -599,11 +731,66 @@ function App() {
   const [editorHost, setEditorHost] = useState<HTMLDivElement | null>(null);
   const [noteDetails, setNoteDetails] = useState(false);
   const [readingNoteId, setReadingNoteId] = useState<string | null>(null);
-  const [dimensions, setDimensions] = useState<Record<string, Dimensions>>({});
+  const [dimensions, setDimensions] = useState<Record<string, Dimensions & { colors?: string[] }>>(
+    {},
+  );
+  const [rules, setRules] = useState<FilterRule[]>([]);
+  const [smart, setSmart] = useState<(Omit<SmartFolder, 'id'> & { id?: string }) | null>(null);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [folderQuery, setFolderQuery] = useState('');
+  const [repair, setRepair] = useState<{
+    changes: { from: string; title: string }[];
+    skipped: string[];
+    key: string;
+  } | null>(null);
+  const [repairBusy, setRepairBusy] = useState(false);
+  const [repairError, setRepairError] = useState('');
+  const [recent, setRecent] = useState<string[]>([]);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('atlas.search-history') ?? '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [searching, setSearching] = useState(false);
+  const [randomOrder, setRandomOrder] = useState<string[]>([]);
+  const [panels, setPanels] = useState({ left: true, right: true });
+  const [peek, setPeek] = useState<Item | null>(null);
+  const peekTimer = useRef<number | undefined>(undefined);
+  const [itemMenu, setItemMenu] = useState<{ item: Item; x: number; y: number } | null>(null);
+  const [undo, setUndo] = useState<{ id: string; patch: ItemPatch }[]>([]);
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('atlas.theme');
+    return stored === 'dark' || stored === 'light' ? stored : 'system';
+  });
+  useEffect(() => {
+    let active = true;
+    window.atlasDesktop
+      ?.appearance()
+      .then((value) => {
+        if (active) setTheme(value);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    const media = matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      document.documentElement.dataset.theme =
+        theme === 'system' ? (media.matches ? 'dark' : 'light') : theme;
+    };
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, [theme]);
+  const [pin, setPin] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [showAI, setShowAI] = useState(false);
   const [sort, setSort] = useState('newest'),
-    [tileSize, setTileSize] = useState(() => Number(localStorage.getItem('atlas.tileSize')) || 180),
+    [tileSize, setTileSize] = useState(() => Number(localStorage.getItem('atlas.tileSize')) || 162),
     [bulk, setBulk] = useState<string[]>([]),
     [preview, setPreview] = useState<string | null>(null);
   useEffect(() => {
@@ -659,8 +846,57 @@ function App() {
     const timer = setTimeout(() => setNotice(''), 4500);
     return () => clearTimeout(timer);
   }, [notice]);
+  const updateVisual = (id: string, d: Dimensions & { colors?: string[] }) =>
+    setDimensions((map) =>
+      map[id]?.width === d.width && map[id]?.height === d.height && (!d.colors || map[id]?.colors)
+        ? map
+        : { ...map, [id]: d },
+    );
+  useEffect(() => {
+    const visualNeeded = [...rules, ...(library.smartFolders?.flatMap((f) => f.rules) ?? [])].some(
+      (rule) => rule.field === 'shape' || rule.field === 'color',
+    );
+    if (!visualNeeded) return;
+    let stopped = false;
+    const items = library.items.filter(
+      (i) => i.mime.startsWith('image/') && !i.trashed && !dimensions[i.id]?.colors,
+    );
+    const worker = async () => {
+      while (!stopped && items.length) {
+        const current = items.shift()!;
+        const image = new Image();
+        image.src = content(current);
+        try {
+          await image.decode();
+          if (!stopped)
+            updateVisual(current.id, {
+              width: image.naturalWidth,
+              height: image.naturalHeight,
+              colors: imageColors(image),
+            });
+        } catch {}
+      }
+    };
+    void Promise.all([worker(), worker()]);
+    return () => {
+      stopped = true;
+    };
+  }, [rules, library.items, library.smartFolders]);
   const active = library.items.filter((i) => !i.trashed),
     tags = [...new Set(active.flatMap((i) => i.tags))].sort();
+  const folderTotals = useMemo(() => {
+    const totals = new Map<string, { members: Set<string>; count: number }>();
+    for (const folder of library.collections) {
+      const members = descendantIds(library.collections, folder.id);
+      totals.set(folder.id, {
+        members,
+        count: library.items.filter(
+          (i) => !i.trashed && i.collections.some((id) => members.has(id)),
+        ).length,
+      });
+    }
+    return totals;
+  }, [library]);
   const filtered = useMemo(
     () =>
       library.items
@@ -670,8 +906,17 @@ function App() {
           if (scope === 'notes' && i.kind !== 'note') return false;
           if (scope === 'untagged' && i.tags.length) return false;
           if (scope === 'inbox' && i.collections.length) return false;
-          if (scope.startsWith('collection:') && !i.collections.includes(scope.slice(11)))
+          if (
+            scope.startsWith('collection:') &&
+            !i.collections.some((id) => folderTotals.get(scope.slice(11))?.members.has(id))
+          )
             return false;
+          if (scope === 'recent' && !recent.includes(i.id)) return false;
+          if (scope.startsWith('smart:')) {
+            const folder = library.smartFolders?.find((f) => f.id === scope.slice(6));
+            if (!folder || !matchesSmartFolder(i, folder, dimensions[i.id])) return false;
+          }
+          if (!rules.every((rule) => matchesRule(i, rule, dimensions[i.id]))) return false;
           if (scope.startsWith('tag:') && !i.tags.includes(scope.slice(4))) return false;
           if (
             kind !== 'all' &&
@@ -683,33 +928,45 @@ function App() {
             .includes(query.toLowerCase());
         })
         .sort((a, b) =>
-          sort === 'name'
-            ? a.title.localeCompare(b.title)
-            : sort === 'size'
-              ? b.size - a.size
-              : sort === 'oldest'
-                ? a.createdAt.localeCompare(b.createdAt)
-                : b.createdAt.localeCompare(a.createdAt),
+          scope === 'recent'
+            ? recent.indexOf(a.id) - recent.indexOf(b.id)
+            : scope === 'random'
+              ? randomOrder.indexOf(a.id) - randomOrder.indexOf(b.id)
+              : sort === 'name'
+                ? a.title.localeCompare(b.title)
+                : sort === 'size'
+                  ? b.size - a.size
+                  : sort === 'oldest'
+                    ? a.createdAt.localeCompare(b.createdAt)
+                    : b.createdAt.localeCompare(a.createdAt),
         ),
-    [library, scope, kind, query, sort],
+    [library, scope, kind, query, sort, dimensions, folderTotals, recent, randomOrder, rules],
   );
   const title =
-    scope === 'all'
-      ? 'All items'
-      : scope === 'favorites'
-        ? 'Favorites'
-        : scope === 'notes'
-          ? 'Notes'
-          : scope === 'untagged'
-            ? 'Untagged'
-            : scope === 'inbox'
-              ? 'Uncategorized'
-              : scope === 'trash'
-                ? 'Trash'
-                : scope.startsWith('tag:')
-                  ? `# ${scope.slice(4)}`
-                  : (library.collections.find((c) => c.id === scope.slice(11))?.name ??
-                    'Collection');
+    scope === 'tags'
+      ? 'All Tags'
+      : scope === 'recent'
+        ? 'Recently used'
+        : scope === 'random'
+          ? 'Random'
+          : scope.startsWith('smart:')
+            ? (library.smartFolders?.find((f) => f.id === scope.slice(6))?.name ?? 'Smart Folder')
+            : scope === 'all'
+              ? 'All items'
+              : scope === 'favorites'
+                ? 'Favorites'
+                : scope === 'notes'
+                  ? 'Notes'
+                  : scope === 'untagged'
+                    ? 'Untagged'
+                    : scope === 'inbox'
+                      ? 'Uncategorized'
+                      : scope === 'trash'
+                        ? 'Trash'
+                        : scope.startsWith('tag:')
+                          ? `# ${scope.slice(4)}`
+                          : (library.collections.find((c) => c.id === scope.slice(11))?.title ??
+                            'Collection');
   const item = library.items.find((i) => i.id === selected);
   const select = React.useCallback(
     (id: string) => {
@@ -717,8 +974,10 @@ function App() {
         id === selected ||
         !dirty ||
         window.confirm('Discard your unsaved changes and open another item?')
-      )
+      ) {
         setSelected(id);
+        setRecent((ids) => [id, ...ids.filter((value) => value !== id)].slice(0, 100));
+      }
     },
     [dirty, selected],
   );
@@ -728,6 +987,23 @@ function App() {
       setSelected(null);
     }
     setBulk([]);
+    if (!pin && !dirty) setSelected(null);
+    if (value === 'random') {
+      const ids = active.map((i) => i.id);
+      for (let index = ids.length - 1; index > 0; index--) {
+        const other = Math.floor(Math.random() * (index + 1));
+        [ids[index], ids[other]] = [ids[other], ids[index]];
+      }
+      setRandomOrder(ids);
+    }
+    if (
+      value === 'tags' &&
+      item?.kind !== 'note' &&
+      dirty &&
+      !window.confirm('Discard your unsaved changes?')
+    )
+      return;
+    if (value === 'tags') setSelected(null);
     setScope(value);
     setMenu(false);
   };
@@ -735,7 +1011,12 @@ function App() {
     if (dirty && !window.confirm('Discard your unsaved changes and apply this batch?')) return;
     try {
       setError('');
-      await api('/batch', 'POST', changes);
+      const updated = await api<Item[]>('/batch', 'POST', changes);
+      setUndo(
+        updated
+          .filter((i) => changes.some((c) => c.id === i.id && c.patch.trashed === true))
+          .map((i) => ({ id: i.id, patch: { expectedRevision: i.revision, trashed: false } })),
+      );
       await reload();
       setNotice(`${changes.length} items updated`);
       setBulk([]);
@@ -746,9 +1027,14 @@ function App() {
   async function save(patch: ItemPatch) {
     try {
       setError('');
-      await api(`/items/${selected}`, 'PATCH', patch);
+      const updated = await api<Item>(`/items/${selected}`, 'PATCH', patch);
+      setUndo(
+        patch.trashed === true
+          ? [{ id: updated.id, patch: { expectedRevision: updated.revision, trashed: false } }]
+          : [],
+      );
       await reload();
-      setNotice('Changes saved');
+      setNotice(patch.trashed === true ? 'Item moved to Trash' : 'Changes saved');
     } catch (e) {
       setError((e as Error).message);
     }
@@ -766,8 +1052,8 @@ function App() {
       setError((e as Error).message);
     }
   }
-  async function importFiles(files: FileList | null) {
-    if (!files?.length) return;
+  async function importFiles(files: ArrayLike<File> | null) {
+    if (!files?.length || uploading) return;
     if (dirty && !window.confirm('Discard your unsaved changes and import files?')) return;
     setError('');
     let count = 0;
@@ -775,7 +1061,9 @@ function App() {
     for (const file of Array.from(files)) {
       setUploading(`Importing ${++count} of ${files.length} · ${file.name}`);
       try {
-        const res = await fetch(`/api/import?name=${encodeURIComponent(file.name)}`, {
+        const params = new URLSearchParams({ name: file.name });
+        if (scope.startsWith('collection:')) params.set('folder', scope.slice(11));
+        const res = await fetch(`/api/import?${params}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: file,
@@ -794,10 +1082,16 @@ function App() {
     }
     setUploading('');
     if (failures.length) setError(failures.join(' · '));
-    else setNotice(`${count} ${count === 1 ? 'file' : 'files'} imported`);
+    else {
+      if (!scope.startsWith('collection:') && scope !== 'all') setScope('all');
+      setQuery('');
+      setKind('all');
+      setRules([]);
+      setNotice(`${count} ${count === 1 ? 'file' : 'files'} imported`);
+    }
     if (fileInput.current) fileInput.current.value = '';
   }
-  async function create(kind: 'note' | 'collection') {
+  async function create(kind: 'note' | 'collection', parentId?: string) {
     if (
       creating ||
       (kind === 'note' &&
@@ -821,11 +1115,12 @@ function App() {
         setKind('all');
         setQuery('');
       } else {
-        const collection = await api<Collection>('/collections', 'POST', {});
+        const collection = await api<Collection>('/collections', 'POST', { parentId });
+        if (parentId) setCollapsed((ids) => ids.filter((id) => id !== parentId));
         setBulk([]);
         setScope(`collection:${collection.id}`);
         if (item?.kind === 'note' && !dirty) setSelected(null);
-        setRenaming(collection);
+        setRenaming({ ...collection, name: collection.title ?? collection.name });
       }
       await reload();
     } catch (e) {
@@ -838,13 +1133,62 @@ function App() {
     if (!renaming) return;
     const { id, name } = renaming;
     setRenaming(null);
-    if (!name.trim() || name === library.collections.find((c) => c.id === id)?.name) return;
+    if (
+      !name.trim() ||
+      name ===
+        (library.collections.find((c) => c.id === id)?.title ??
+          library.collections.find((c) => c.id === id)?.name)
+    )
+      return;
     try {
       await api(`/collections/${id}`, 'PATCH', { name });
       await reload();
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+  function rememberSearch() {
+    const value = query.trim();
+    if (!value) return;
+    setSearchHistory((history) => {
+      const next = [value, ...history.filter((v) => v !== value)].slice(0, 8);
+      localStorage.setItem('atlas.search-history', JSON.stringify(next));
+      return next;
+    });
+  }
+  function startPeek(i: Item) {
+    window.clearTimeout(peekTimer.current);
+    if (i.mime.startsWith('image/') || i.mime.startsWith('video/'))
+      peekTimer.current = window.setTimeout(() => setPeek(i), 360);
+  }
+  function stopPeek() {
+    window.clearTimeout(peekTimer.current);
+    setPeek(null);
+  }
+  async function exportSelection(items: Item[]) {
+    if (!items.length) return;
+    if (window.atlasDesktop) {
+      try {
+        const result = await window.atlasDesktop.exportOriginals(items.map((i) => i.id));
+        if (result.count) setNotice(`Exported ${result.count} files`);
+        if (result.skipped.length) setError(`Could not export: ${result.skipped.join(', ')}`);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+      return;
+    }
+    for (const i of items) {
+      const a = document.createElement('a');
+      a.href = content(i, true);
+      a.download = '';
+      a.click();
+    }
+  }
+  function viewFolderRepair() {
+    setRepairError('');
+    void api<NonNullable<typeof repair>>('/eagle/folder-repair')
+      .then(setRepair)
+      .catch((e) => setError(e.message));
   }
   const nav = (value: string, Icon: typeof Layers, label: string, count?: number) => (
     <button
@@ -856,9 +1200,104 @@ function App() {
       {count !== undefined && <small>{count}</small>}
     </button>
   );
+  function renderFolderTree(parentId: string | null, depth: number): React.ReactNode {
+    if (depth > 101) return null;
+    const q = folderQuery.trim().toLowerCase();
+    return library.collections
+      .filter(
+        (c) =>
+          (c.parentId ?? null) === parentId &&
+          (!q ||
+            [...descendantIds(library.collections, c.id)].some((id) =>
+              library.collections
+                .find((f) => f.id === id)
+                ?.name.toLowerCase()
+                .includes(q),
+            )),
+      )
+      .map((c) => {
+        const children = library.collections.some((folder) => folder.parentId === c.id);
+        const expanded = !collapsed.includes(c.id) || !!q;
+        return (
+          <div key={c.id}>
+            <div
+              className="folder-row tree-row"
+              style={{ paddingInlineStart: Math.min(depth, 8) * 10 }}
+            >
+              {children ? (
+                <button
+                  type="button"
+                  className="tree-disclosure"
+                  aria-label={`${expanded ? 'Collapse' : 'Expand'} ${c.title ?? c.name}`}
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setCollapsed((ids) =>
+                      ids.includes(c.id) ? ids.filter((id) => id !== c.id) : [...ids, c.id],
+                    )
+                  }
+                >
+                  <ChevronRight size={13} />
+                </button>
+              ) : (
+                <span className="tree-gap" />
+              )}
+              {renaming?.id === c.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void renameFolder();
+                  }}
+                >
+                  <input
+                    autoFocus
+                    aria-label="Folder name"
+                    maxLength={80}
+                    value={renaming.name}
+                    onFocus={(e) => e.currentTarget.select()}
+                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                    onBlur={() => void renameFolder()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setRenaming(null);
+                    }}
+                  />
+                </form>
+              ) : (
+                <>
+                  {nav(
+                    `collection:${c.id}`,
+                    Folder,
+                    c.title ?? c.name,
+                    folderTotals.get(c.id)?.count,
+                  )}
+                  <button
+                    className="icon-button rename-folder"
+                    aria-label={`Add subfolder to ${c.title ?? c.name}`}
+                    disabled={creating}
+                    onClick={() => void create('collection', c.id)}
+                  >
+                    <FolderPlus size={13} />
+                  </button>
+                  <button
+                    className="icon-button rename-folder"
+                    aria-label={`Rename ${c.title ?? c.name}`}
+                    onClick={() => setRenaming({ ...c, name: c.title ?? c.name })}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                </>
+              )}
+            </div>
+            {children && expanded && renderFolderTree(c.id, depth + 1)}
+          </div>
+        );
+      });
+  }
   return (
     <div
-      className={`app ${item ? 'has-inspector' : ''} ${item?.kind === 'note' ? 'editing-note' : ''} ${noteDetails ? 'show-note-details' : ''}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && peek) stopPeek();
+      }}
+      className={`app ${panels.right ? 'has-inspector' : ''} ${panels.left ? '' : 'hide-sidebar'} ${panels.right ? '' : 'hide-inspector'} ${item?.kind === 'note' ? 'editing-note' : ''} ${noteDetails ? 'show-note-details' : ''}`}
     >
       {menu && (
         <button
@@ -876,12 +1315,7 @@ function App() {
             atlas<span className="brand-dot">.</span>
           </span>
         </div>
-        <div className="library-switch">
-          <div className="library-avatar">P</div>
-          <div>
-            <strong>Personal library</strong>
-          </div>
-        </div>
+        <LibraryPicker onError={setError} />
         <div className="nav-label">WORKSPACE</div>
         <nav aria-label="Library navigation">
           {nav('all', Layers, 'All items', active.length)}
@@ -892,9 +1326,47 @@ function App() {
             active.filter((i) => !i.collections.length).length,
           )}
           {nav('untagged', Tag, 'Untagged', active.filter((i) => !i.tags.length).length)}
+          {nav('recent', Clock3, 'Recently used')}
+          {nav('random', Shuffle, 'Random')}
+          {nav('tags', Tag, 'All Tags', tags.length)}
           {nav('trash', Trash2, 'Trash', library.items.filter((i) => i.trashed).length)}
           {nav('favorites', Star, 'Favorites')}
           {nav('notes', FileText, 'Notes', active.filter((i) => i.kind === 'note').length)}
+        </nav>
+        <div className="nav-label">
+          SMART FOLDERS{' '}
+          <button
+            className="icon-button"
+            aria-label="New Smart Folder"
+            onClick={() =>
+              setSmart({
+                name: '',
+                match: 'all',
+                rules: [{ field: 'name', operator: 'contains', value: '' }],
+              })
+            }
+          >
+            <Plus size={15} />
+          </button>
+        </div>
+        <nav aria-label="Smart folders">
+          {library.smartFolders?.map((folder) => (
+            <div className="folder-row" key={folder.id}>
+              {nav(
+                `smart:${folder.id}`,
+                Sparkles,
+                folder.name,
+                active.filter((i) => matchesSmartFolder(i, folder, dimensions[i.id])).length,
+              )}
+              <button
+                className="icon-button rename-folder"
+                aria-label={`Edit Smart Folder ${folder.name}`}
+                onClick={() => setSmart(folder)}
+              >
+                <Pencil size={13} />
+              </button>
+            </div>
+          ))}
         </nav>
         <div className="nav-label">
           FOLDERS
@@ -907,71 +1379,18 @@ function App() {
             <Plus size={14} />
           </button>
         </div>
-        <nav>
-          {library.collections.map((c) => (
-            <div className="folder-row" key={c.id}>
-              {renaming?.id === c.id ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void renameFolder();
-                  }}
-                >
-                  <Folder size={17} />
-                  <input
-                    autoFocus
-                    onFocus={(e) => e.currentTarget.select()}
-                    aria-label="Folder name"
-                    maxLength={80}
-                    value={renaming.name}
-                    onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
-                    onBlur={() => void renameFolder()}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') setRenaming(null);
-                    }}
-                  />
-                </form>
-              ) : (
-                <>
-                  {nav(
-                    `collection:${c.id}`,
-                    Folder,
-                    c.name,
-                    active.filter((i) => i.collections.includes(c.id)).length,
-                  )}
-                  <button
-                    type="button"
-                    className="icon-button rename-folder"
-                    aria-label={`Rename ${c.name}`}
-                    onClick={() => setRenaming(c)}
-                  >
-                    <Pencil size={13} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-        </nav>
-        {!library.collections.length && (
-          <p className="sidebar-hint">Give your references a home.</p>
-        )}
-        <div className="nav-label">
-          TAGS<span>{tags.length}</span>
-        </div>
-        <div className="sidebar-tags">
-          {tags.map((tag) => (
-            <button
-              key={tag}
-              className={scope === `tag:${tag}` ? 'tag active' : 'tag'}
-              onClick={() => navigate(`tag:${tag}`)}
-            >
-              <span>#</span>
-              {tag}
-            </button>
-          ))}
-          {!tags.length && <p className="sidebar-hint">Tags appear as you organize.</p>}
-        </div>
+        <nav aria-label="Folder tree">{renderFolderTree(null, 0)}</nav>
         <div className="sidebar-bottom">
+          <input
+            className="folder-filter"
+            aria-label="Filter folders"
+            placeholder="Filter folders…"
+            value={folderQuery}
+            onChange={(e) => setFolderQuery(e.target.value)}
+          />
+          <button type="button" className="text-button" onClick={viewFolderRepair}>
+            Repair Eagle folders…
+          </button>
           <div className="storage">
             <span className="status-dot" />
             <div>
@@ -982,6 +1401,26 @@ function App() {
         </div>
       </aside>
       <main
+        onPaste={(e) => {
+          if ((e.target as HTMLElement).closest('input,textarea,[contenteditable="true"]')) return;
+          const captures = Array.from(e.clipboardData.files)
+            .filter((file) => file.type.startsWith('image/'))
+            .map((file, n) => {
+              const extension =
+                file.type === 'image/jpeg'
+                  ? 'jpg'
+                  : file.type.split('/')[1].replace(/[^a-z0-9]/g, '');
+              return new window.File(
+                [file],
+                `Clipboard ${new Date().toISOString().replace(/[:.]/g, '-')}${n ? '-' + (n + 1) : ''}.${extension}`,
+                { type: file.type },
+              );
+            });
+          if (captures.length) {
+            e.preventDefault();
+            void importFiles(captures);
+          }
+        }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -989,6 +1428,15 @@ function App() {
         }}
       >
         <header className="topbar">
+          <button
+            type="button"
+            className="icon-button desktop-panel-toggle"
+            aria-label="Toggle folder sidebar"
+            aria-pressed={panels.left}
+            onClick={() => setPanels((p) => ({ ...p, left: !p.left }))}
+          >
+            <PanelLeft size={17} />
+          </button>
           <button
             className="icon-button mobile-menu"
             aria-label="Open navigation"
@@ -1002,6 +1450,30 @@ function App() {
             <span>{title}</span>
           </div>
           <div className="top-actions">
+            <select
+              className="theme-select"
+              aria-label="Appearance"
+              value={theme}
+              onChange={(e) => {
+                const next = e.target.value as typeof theme;
+                setTheme(next);
+                localStorage.setItem('atlas.theme', next);
+                window.atlasDesktop?.setAppearance(next).catch((e) => setError(e.message));
+              }}
+            >
+              <option value="system">System theme</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+            <button
+              type="button"
+              className="icon-button desktop-panel-toggle"
+              aria-label="Toggle inspector"
+              aria-pressed={panels.right}
+              onClick={() => setPanels((p) => ({ ...p, right: !p.right }))}
+            >
+              <PanelRight size={17} />
+            </button>
             {item?.kind === 'note' && (
               <button
                 type="button"
@@ -1025,9 +1497,32 @@ function App() {
             >
               AI suggestions
             </button>
-            <a className="icon-button" aria-label="Export metadata manifest" href="/api/manifest">
-              <ArrowDownToLine size={17} />
-            </a>
+            <details className="export-menu">
+              <summary>
+                <ArrowDownToLine size={16} />
+                Export
+              </summary>
+              <div className="library-popover">
+                <button
+                  disabled={!bulk.length && !item}
+                  onClick={() =>
+                    void exportSelection(
+                      bulk.length
+                        ? library.items.filter((i) => bulk.includes(i.id))
+                        : item
+                          ? [item]
+                          : [],
+                    )
+                  }
+                >
+                  Export selected files
+                </button>
+                <a aria-label="Export metadata manifest" href="/api/manifest">
+                  Export catalog JSON
+                </a>
+                <small>Full backups are under Library → Back Up Library.</small>
+              </div>
+            </details>
             <span className="local-badge">
               <span className="status-dot" />
               Local
@@ -1089,239 +1584,307 @@ function App() {
               />
             </div>
           </section>
-          <div className="toolbar">
-            <label className="search">
-              <Search size={17} />
-              <input
-                aria-label="Search library"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search titles, tags, and notes…"
-              />
-              <kbd>⌕</kbd>
-            </label>
-            <select
-              className="type-filter"
-              aria-label="Filter file type"
-              value={kind}
-              onChange={(e) => setKind(e.target.value)}
-            >
-              <option value="all">All types</option>
-              <option value="image">Images</option>
-              <option value="video">Videos</option>
-              <option value="audio">Audio</option>
-              <option value="note">Notes</option>
-            </select>
-            <div className="view-switch" aria-label="Library view">
-              {(
-                [
-                  ['grid', Grid2X2, 'Grid'],
-                  ['justified', Rows3, 'Justified'],
-                  ['waterfall', Columns3, 'Waterfall'],
-                  ['table', Table2, 'Table'],
-                  ['graph', Network, 'Graph'],
-                ] as const
-              ).map(([value, Icon, label]) => (
-                <button
-                  className={view === value ? 'active' : ''}
-                  key={value}
-                  title={`${label} view`}
-                  aria-label={`${label} view`}
-                  aria-pressed={view === value}
-                  onClick={() => setView(value)}
-                >
-                  <Icon size={17} />
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="organize-toolbar">
-            <span>{filtered.length} items</span>
-            <label>
-              Sort{' '}
-              <select
-                aria-label="Sort items"
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-              >
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="name">Name A–Z</option>
-                <option value="size">Largest first</option>
-              </select>
-            </label>
-            <label className="size-control">
-              Thumbnail size
-              <input
-                aria-label="Thumbnail size"
-                type="range"
-                min="150"
-                max="280"
-                step="10"
-                value={tileSize}
-                onChange={(e) => setTileSize(Number(e.target.value))}
-              />
-            </label>
-            <button
-              className="text-button"
-              onClick={() => setBulk(filtered.slice(0, 500).map((i) => i.id))}
-            >
-              Select all{filtered.length > 500 ? ' (first 500)' : ''}
-            </button>
-            {item && (
-              <button className="text-button" onClick={() => setPreview(item.id)}>
-                Quick preview <kbd>Space</kbd>
-              </button>
-            )}
-          </div>
-          {bulk.length > 0 && (
-            <BulkBar
-              items={library.items.filter((i) => bulk.includes(i.id))}
-              collections={library.collections}
-              onApply={applyBulk}
-              onClear={() => setBulk([])}
+          {scope === 'tags' ? (
+            <TagWorkspace
+              items={active}
+              groups={library.tagGroups ?? []}
+              openTag={(tag) => navigate(`tag:${tag}`)}
+              onSave={async (group) => {
+                await api('/tag-groups', 'POST', group);
+                await reload();
+              }}
             />
-          )}
-          {error && (
-            <div className="alert" role="alert">
-              <span>{error}</span>
-              <button
-                className="icon-button"
-                aria-label="Dismiss error"
-                onClick={() => setError('')}
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )}
-          {uploading && (
-            <div className="upload-status" role="status">
-              <LoaderCircle size={15} />
-              {uploading}
-            </div>
-          )}
-          <section className="library-content">
-            {loading ? (
-              <div className="empty-state">
-                <LoaderCircle size={28} />
-                <h2>Opening your library…</h2>
-              </div>
-            ) : !filtered.length ? (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  {active.length ? <Search size={28} /> : <Layers size={32} />}
-                </div>
-                <span className="eyebrow">
-                  {active.length ? 'ROOM TO EXPLORE' : 'A FRESH START'}
-                </span>
-                <h2>{active.length ? 'Nothing here yet' : 'Collect a little inspiration'}</h2>
-                <p>
-                  {active.length
-                    ? 'Try a different search or add items to this collection.'
-                    : 'Bring in images, videos, documents, and the notes that connect them. Your originals stay on this machine.'}
-                </p>
-                <button className="primary" onClick={() => fileInput.current?.click()}>
-                  <Upload size={16} />
-                  Import your first files
-                </button>
-                <small>or drag files anywhere into this workspace</small>
-              </div>
-            ) : view !== 'table' && view !== 'graph' ? (
-              <Gallery
-                items={filtered}
-                view={view}
-                size={tileSize}
-                dimensions={dimensions}
-                render={(i, height) => (
-                  <div
-                    key={i.id}
-                    className={`asset-card ${selected === i.id || bulk.includes(i.id) ? 'selected' : ''}`}
-                  >
-                    <input
-                      className="card-checkbox"
-                      type="checkbox"
-                      aria-label={`Select ${i.title}`}
-                      checked={bulk.includes(i.id)}
-                      onChange={(e) =>
-                        setBulk((ids) =>
-                          e.target.checked ? [...ids, i.id] : ids.filter((id) => id !== i.id),
-                        )
+          ) : (
+            <>
+              <div className="toolbar">
+                <label className="search">
+                  <Search size={17} />
+                  <input
+                    onFocus={() => setSearching(true)}
+                    onBlur={() => {
+                      setSearching(false);
+                      rememberSearch();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        rememberSearch();
+                        setSearching(false);
                       }
-                    />
+                      if (e.key === 'Escape') setSearching(false);
+                    }}
+                    aria-label="Search library"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search titles, tags, and notes…"
+                  />
+                  {query && (
                     <button
-                      className="asset-open"
-                      onClick={(e) => {
-                        if (e.metaKey || e.ctrlKey)
-                          setBulk((ids) =>
-                            ids.includes(i.id) ? ids.filter((id) => id !== i.id) : [...ids, i.id],
-                          );
-                        else select(i.id);
-                      }}
-                      onDoubleClick={() => (i.kind === 'note' ? select(i.id) : setPreview(i.id))}
+                      type="button"
+                      className="icon-button"
+                      aria-label="Clear search"
+                      onClick={() => setQuery('')}
                     >
-                      <div className="thumbnail" style={{ height }}>
-                        <Thumbnail
-                          item={i}
-                          onDimensions={(d) =>
-                            setDimensions((map) =>
-                              map[i.id]?.width === d.width && map[i.id]?.height === d.height
-                                ? map
-                                : { ...map, [i.id]: d },
+                      <X size={14} />
+                    </button>
+                  )}
+                  {searching && !query && searchHistory.length > 0 && (
+                    <div className="search-history">
+                      {searchHistory.map((value) => (
+                        <button
+                          type="button"
+                          key={value}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setQuery(value);
+                            setSearching(false);
+                          }}
+                        >
+                          <Clock3 size={13} />
+                          {value}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </label>
+                <select
+                  className="type-filter"
+                  aria-label="Filter file type"
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value)}
+                >
+                  <option value="all">All types</option>
+                  <option value="image">Images</option>
+                  <option value="video">Videos</option>
+                  <option value="audio">Audio</option>
+                  <option value="note">Notes</option>
+                </select>
+                <div className="view-switch" aria-label="Library view">
+                  {(
+                    [
+                      ['grid', Grid2X2, 'Grid'],
+                      ['justified', Rows3, 'Justified'],
+                      ['waterfall', Columns3, 'Waterfall'],
+                      ['table', Table2, 'Table'],
+                      ['graph', Network, 'Graph'],
+                    ] as const
+                  ).map(([value, Icon, label]) => (
+                    <button
+                      className={view === value ? 'active' : ''}
+                      key={value}
+                      title={`${label} view`}
+                      aria-label={`${label} view`}
+                      aria-pressed={view === value}
+                      onClick={() => setView(value)}
+                    >
+                      <Icon size={17} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <FilterStrip
+                rules={rules}
+                setRules={setRules}
+                collections={library.collections}
+                tags={tags}
+                save={() => setSmart({ name: '', match: 'all', rules })}
+              />
+              <div className="organize-toolbar">
+                <span>{filtered.length} items</span>
+                <label>
+                  Sort{' '}
+                  <select
+                    aria-label="Sort items"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value)}
+                  >
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="name">Name A–Z</option>
+                    <option value="size">Largest first</option>
+                  </select>
+                </label>
+                <label className="size-control">
+                  Thumbnail size
+                  <input
+                    aria-label="Thumbnail size"
+                    type="range"
+                    min="105"
+                    max="280"
+                    step="10"
+                    value={tileSize}
+                    onChange={(e) => setTileSize(Number(e.target.value))}
+                  />
+                </label>
+                <button
+                  className="text-button"
+                  onClick={() => setBulk(filtered.slice(0, 500).map((i) => i.id))}
+                >
+                  Select all{filtered.length > 500 ? ' (first 500)' : ''}
+                </button>
+                {item && (
+                  <button className="text-button" onClick={() => setPreview(item.id)}>
+                    Quick preview <kbd>Space</kbd>
+                  </button>
+                )}
+              </div>
+              {bulk.length > 0 && (
+                <BulkBar
+                  items={library.items.filter((i) => bulk.includes(i.id))}
+                  collections={library.collections}
+                  onApply={applyBulk}
+                  onClear={() => setBulk([])}
+                />
+              )}
+              {error && (
+                <div className="alert" role="alert">
+                  <span>{error}</span>
+                  <button
+                    className="icon-button"
+                    aria-label="Dismiss error"
+                    onClick={() => setError('')}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+              {uploading && (
+                <div className="upload-status" role="status">
+                  <LoaderCircle size={15} />
+                  {uploading}
+                </div>
+              )}
+              <section className="library-content">
+                {loading ? (
+                  <div className="empty-state">
+                    <LoaderCircle size={28} />
+                    <h2>Opening your library…</h2>
+                  </div>
+                ) : !filtered.length ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">
+                      {active.length ? <Search size={28} /> : <Layers size={32} />}
+                    </div>
+                    <span className="eyebrow">
+                      {active.length ? 'ROOM TO EXPLORE' : 'A FRESH START'}
+                    </span>
+                    <h2>{active.length ? 'Nothing here yet' : 'Collect a little inspiration'}</h2>
+                    <p>
+                      {active.length
+                        ? 'Try a different search or add items to this collection.'
+                        : 'Bring in images, videos, documents, and the notes that connect them. Your originals stay on this machine.'}
+                    </p>
+                    <button className="primary" onClick={() => fileInput.current?.click()}>
+                      <Upload size={16} />
+                      Import your first files
+                    </button>
+                    <small>or drag files anywhere into this workspace</small>
+                  </div>
+                ) : view !== 'table' && view !== 'graph' ? (
+                  <Gallery
+                    items={filtered}
+                    view={view}
+                    size={tileSize}
+                    dimensions={dimensions}
+                    render={(i, height) => (
+                      <div
+                        key={i.id}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          stopPeek();
+                          setItemMenu({ item: i, x: e.clientX, y: e.clientY });
+                        }}
+                        className={`asset-card ${selected === i.id || bulk.includes(i.id) ? 'selected' : ''}`}
+                      >
+                        <input
+                          className="card-checkbox"
+                          type="checkbox"
+                          aria-label={`Select ${i.title}`}
+                          checked={bulk.includes(i.id)}
+                          onChange={(e) =>
+                            setBulk((ids) =>
+                              e.target.checked ? [...ids, i.id] : ids.filter((id) => id !== i.id),
                             )
                           }
                         />
-                        {i.favorite && (
-                          <span className="favorite-indicator">
-                            <Star size={12} fill="currentColor" />
-                          </span>
-                        )}
-                        <span className="format-badge">
-                          {i.kind === 'note'
-                            ? 'MD'
-                            : i.filename.split('.').at(-1)?.slice(0, 8).toUpperCase()}
-                        </span>
+                        <button
+                          className="asset-open"
+                          onClick={(e) => {
+                            if (e.metaKey || e.ctrlKey)
+                              setBulk((ids) =>
+                                ids.includes(i.id)
+                                  ? ids.filter((id) => id !== i.id)
+                                  : [...ids, i.id],
+                              );
+                            else select(i.id);
+                          }}
+                          onDoubleClick={() =>
+                            i.kind === 'note' ? select(i.id) : setPreview(i.id)
+                          }
+                        >
+                          <div className="thumbnail" style={{ height }}>
+                            <Thumbnail item={i} onDimensions={(d) => updateVisual(i.id, d)} />
+                            {i.favorite && (
+                              <span className="favorite-indicator">
+                                <Star size={12} fill="currentColor" />
+                              </span>
+                            )}
+                            <span className="format-badge">
+                              {i.kind === 'note'
+                                ? 'MD'
+                                : i.filename.split('.').at(-1)?.slice(0, 8).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="card-caption">
+                            <strong>{i.title}</strong>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          className="card-zoom"
+                          title="Quick preview"
+                          aria-label={`Preview ${i.title}`}
+                          onPointerEnter={(e) => {
+                            if (e.pointerType === 'mouse') startPeek(i);
+                          }}
+                          onPointerLeave={stopPeek}
+                          onClick={() => {
+                            stopPeek();
+                            setPreview(i.id);
+                          }}
+                        >
+                          <ZoomIn size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="card-actions"
+                          aria-label={`Actions for ${i.title}`}
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setItemMenu({ item: i, x: rect.left, y: rect.bottom });
+                          }}
+                        >
+                          ···
+                        </button>
                       </div>
-                      <div className="card-caption">
-                        <strong>{i.title}</strong>
-                        <div>
-                          <span>
-                            {i.tags[0]
-                              ? `# ${i.tags[0]}`
-                              : i.kind === 'note'
-                                ? 'Markdown note'
-                                : 'Untagged'}
-                          </span>
-                          <small>{bytes(i.size)}</small>
-                        </div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="card-zoom"
-                      title="Quick preview"
-                      aria-label={`Preview ${i.title}`}
-                      onClick={() => setPreview(i.id)}
-                    >
-                      <ZoomIn size={16} />
-                    </button>
-                  </div>
+                    )}
+                  />
+                ) : view === 'table' ? (
+                  <TableView items={filtered} onSelect={select} selected={selected} />
+                ) : (
+                  <GraphView items={filtered} onSelect={select} />
                 )}
-              />
-            ) : view === 'table' ? (
-              <TableView items={filtered} onSelect={select} selected={selected} />
-            ) : (
-              <GraphView items={filtered} onSelect={select} />
-            )}
-          </section>
-          <footer className="workspace-footer">
-            <span>
-              {filtered.length} items <span>·</span>{' '}
-              {bytes(filtered.reduce((n, i) => n + i.size, 0))}
-            </span>
-            <span>
-              Personal library <span>·</span> Early release 0.4
-            </span>
-          </footer>
+              </section>
+              <footer className="workspace-footer">
+                <span>
+                  {filtered.length} items <span>·</span>{' '}
+                  {bytes(filtered.reduce((n, i) => n + i.size, 0))}
+                </span>
+                <span>
+                  Local library <span>·</span> Atlas 0.5
+                </span>
+              </footer>
+            </>
+          )}
         </div>
       </main>
       {showAI && (
@@ -1345,7 +1908,44 @@ function App() {
           }}
         />
       )}
-      {item && (
+      {panels.right && (bulk.length > 0 || !item || scope === 'tags') && (
+        <aside className="inspector selection-inspector">
+          <div className="inspector-heading">
+            <span>{bulk.length ? 'SELECTION' : 'DETAILS'}</span>
+            <button
+              className="icon-button"
+              aria-label="Pin inspector"
+              aria-pressed={pin}
+              onClick={() => setPin(!pin)}
+            >
+              <Pin size={16} />
+            </button>
+          </div>
+          <strong>{bulk.length ? `${bulk.length} selected` : title}</strong>
+          <dl>
+            <dt>Items</dt>
+            <dd>{bulk.length || filtered.length}</dd>
+            <dt>Total size</dt>
+            <dd>
+              {bytes(
+                (bulk.length ? library.items.filter((i) => bulk.includes(i.id)) : filtered).reduce(
+                  (sum, i) => sum + i.size,
+                  0,
+                ),
+              )}
+            </dd>
+          </dl>
+          {!!bulk.length && (
+            <button
+              className="secondary"
+              onClick={() => void exportSelection(library.items.filter((i) => bulk.includes(i.id)))}
+            >
+              Export selected
+            </button>
+          )}
+        </aside>
+      )}
+      {item && scope !== 'tags' && (bulk.length === 0 || item.kind === 'note') && (
         <Inspector
           key={`${item.id}-${item.revision}`}
           item={item}
@@ -1362,14 +1962,207 @@ function App() {
           onDirty={setDirty}
           editorHost={editorHost}
           onOpen={select}
+          onColorFilter={(color) => {
+            setRules((current) => [
+              ...current.filter((r) => r.field !== 'color'),
+              { field: 'color', operator: 'is', value: color, tolerance: 12 },
+            ]);
+            navigate('all');
+          }}
           noteReading={item.id === readingNoteId}
           onNoteReadingChange={(reading) => setReadingNoteId(reading ? item.id : null)}
         />
+      )}
+      {peek && !preview && <HoverPeek item={peek} />}
+      {itemMenu && (
+        <ItemMenu
+          x={itemMenu.x}
+          y={itemMenu.y}
+          onClose={() => setItemMenu(null)}
+          actions={[
+            { label: 'Quick Preview', run: () => setPreview(itemMenu.item.id) },
+            ...(window.atlasDesktop
+              ? [
+                  {
+                    label: 'Open a copy in default app',
+                    run: () =>
+                      void window.atlasDesktop
+                        ?.itemAction(itemMenu.item.id, 'open-copy')
+                        .catch((e) => setError(e.message)),
+                  },
+                  ...(itemMenu.item.kind === 'asset'
+                    ? [
+                        {
+                          label: 'Reveal original file',
+                          run: () =>
+                            void window.atlasDesktop
+                              ?.itemAction(itemMenu.item.id, 'reveal')
+                              .catch((e) => setError(e.message)),
+                        },
+                      ]
+                    : []),
+                ]
+              : []),
+            {
+              label: 'Copy title',
+              run: () =>
+                void navigator.clipboard
+                  .writeText(itemMenu.item.title)
+                  .then(() => setNotice('Title copied'))
+                  .catch((e) => setError(e.message)),
+            },
+            {
+              label: 'Open details',
+              run: () => {
+                setPanels((p) => ({ ...p, right: true }));
+                setNoteDetails(true);
+                select(itemMenu.item.id);
+              },
+            },
+            {
+              label: 'Rename',
+              run: () => {
+                setPanels((p) => ({ ...p, right: true }));
+                select(itemMenu.item.id);
+                requestAnimationFrame(() => {
+                  const field = document.querySelector<HTMLInputElement>(
+                    '[aria-label="Item title"]',
+                  );
+                  field?.focus();
+                  field?.select();
+                });
+              },
+            },
+            {
+              label: 'Add to folders',
+              run: () => {
+                setPanels((p) => ({ ...p, right: true }));
+                select(itemMenu.item.id);
+                requestAnimationFrame(() =>
+                  document
+                    .querySelector('[aria-label="Item title"]')
+                    ?.closest('form')
+                    ?.querySelector<HTMLDetailsElement>('details.folder-membership')
+                    ?.setAttribute('open', ''),
+                );
+              },
+            },
+            {
+              label: 'Export original or Markdown',
+              run: () => void exportSelection([itemMenu.item]),
+            },
+            {
+              label: itemMenu.item.trashed ? 'Restore item' : 'Move to Trash',
+              run: () =>
+                void applyBulk([
+                  {
+                    id: itemMenu.item.id,
+                    patch: {
+                      expectedRevision: itemMenu.item.revision,
+                      trashed: !itemMenu.item.trashed,
+                    },
+                  },
+                ]),
+            },
+          ]}
+        />
+      )}
+      {smart && (
+        <SmartEditor
+          initial={smart}
+          items={active}
+          collections={library.collections}
+          tags={tags}
+          visual={dimensions}
+          onClose={() => setSmart(null)}
+          onSave={async (data) => {
+            const folder = await api<SmartFolder>(
+              smart.id ? `/smart-folders/${smart.id}` : '/smart-folders',
+              smart.id ? 'PATCH' : 'POST',
+              data,
+            );
+            await reload();
+            setRules([]);
+            navigate(`smart:${folder.id}`);
+          }}
+          onDelete={async () => {
+            await api(`/smart-folders/${smart.id}`, 'DELETE');
+            await reload();
+            navigate('all');
+          }}
+        />
+      )}
+      {repair && (
+        <WorkspaceDialog
+          title="Review Eagle folder repair"
+          onClose={() => {
+            if (!repairBusy) setRepair(null);
+          }}
+        >
+          <p>
+            {repair.changes.length
+              ? `${repair.changes.length} folders can be put back under their Eagle parents.`
+              : 'No matching flat Eagle folders need repair.'}
+          </p>
+          <ul>
+            {repair.changes.map((entry) => (
+              <li key={entry.from}>{entry.from}</li>
+            ))}
+          </ul>
+          {repair.skipped.length > 0 && (
+            <details>
+              <summary>{repair.skipped.length} unmatched paths will be kept as they are</summary>
+              <ul>
+                {repair.skipped.map((path) => (
+                  <li key={path}>{path}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {repairError && <p role="alert">{repairError}</p>}
+          <div className="workspace-button-row">
+            <button
+              className="primary"
+              disabled={repairBusy || !repair.changes.length}
+              onClick={async () => {
+                setRepairBusy(true);
+                setRepairError('');
+                try {
+                  await api('/eagle/folder-repair', 'POST', { key: repair.key });
+                  await reload();
+                  setRepair(null);
+                  setNotice('Eagle folder tree repaired');
+                } catch (e) {
+                  setRepairError((e as Error).message);
+                } finally {
+                  setRepairBusy(false);
+                }
+              }}
+            >
+              Apply repair
+            </button>
+            <button className="secondary" disabled={repairBusy} onClick={() => setRepair(null)}>
+              Cancel
+            </button>
+          </div>
+        </WorkspaceDialog>
       )}
       {notice && (
         <div className="toast" role="status">
           <Check size={16} />
           {notice}
+          {!!undo.length && (
+            <button
+              className="text-button"
+              onClick={() => {
+                const changes = undo;
+                setUndo([]);
+                void applyBulk(changes);
+              }}
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -71,6 +71,9 @@ test('Eagle import preserves bytes, dates, tags, folder paths, raw metadata and 
         lib.collections().find((c) => c.id === item.collections[0])?.name,
         'Design / Inspiration',
       );
+      const child = lib.collections().find((c) => c.id === item.collections[0])!;
+      assert.equal(child.title, 'Inspiration');
+      assert.equal(lib.collections().find((c) => c.id === child.parentId)?.title, 'Design');
       assert.equal(lib.list().find((i) => i.source?.id === 'two')?.trashed, true);
       assert.equal(lib.list().find((i) => i.source?.id === 'link')?.body, 'https://example.com');
       await createBackup(lib, join(f.dir, 'Backup'));
@@ -125,6 +128,76 @@ test('cancelled Eagle import removes partial output and leaves the source unchan
       'original',
     );
   } finally {
+    await rm(f.dir, { recursive: true, force: true });
+  }
+});
+
+test('legacy Eagle folder repair previews changes, rejects a stale review and keeps membership IDs', async () => {
+  const f = await fixture();
+  const library = new Library(join(f.dir, 'Legacy Atlas'));
+  try {
+    const parent = library.createCollection('Design');
+    const child = library.createCollection('Design / Inspiration');
+    const userFolder = library.createCollection('Design / My own folder');
+    const note = library.createNote({ title: 'Existing linked note', body: 'Draft' });
+    library.patch(note.id, { expectedRevision: 1, collections: [child.id] });
+    const metadata = JSON.parse(await readFile(join(f.source, 'metadata.json'), 'utf8'));
+    library.db.exec('CREATE TABLE import_reports(id TEXT PRIMARY KEY, data TEXT NOT NULL)');
+    library.db
+      .prepare('INSERT INTO import_reports VALUES(?,?)')
+      .run('legacy', JSON.stringify({ format: 'atlas-eagle-import', libraryMetadata: metadata }));
+    const preview = library.eagleFolderRepair();
+    assert.deepEqual(preview.changes, [
+      { id: child.id, parentId: parent.id, title: 'Inspiration', from: child.name },
+    ]);
+    assert.equal(library.collections().find((c) => c.id === child.id)?.parentId, null);
+    library.createCollection('Changed after preview');
+    assert.throws(() => library.repairEagleFolders(preview.key), /changed/);
+    library.repairEagleFolders(library.eagleFolderRepair().key);
+    assert.deepEqual(library.get(note.id).collections, [child.id]);
+    assert.equal(library.collections().find((c) => c.id === child.id)?.parentId, parent.id);
+    assert.equal(library.collections().find((c) => c.id === userFolder.id)?.parentId, null);
+    assert.equal(library.eagleFolderRepair().changes.length, 0);
+  } finally {
+    library.close();
+    await rm(f.dir, { recursive: true, force: true });
+  }
+});
+
+test('saved import rule assigns tags and a nested folder while preserving the original revision', async () => {
+  const f = await fixture();
+  const library = new Library(join(f.dir, 'Rule Atlas'));
+  try {
+    const parent = library.createCollection('References');
+    const child = library.createCollection('Screens', parent.id);
+    library.saveSmartFolder({
+      name: 'Screenshots',
+      match: 'all',
+      rules: [{ field: 'type', operator: 'is', value: 'png' }],
+      addTag: 'screen',
+      addFolder: child.id,
+    });
+    const image = library.importAsset({
+      filename: 'a.png',
+      mime: 'image/png',
+      size: 1,
+      hash: 'a'.repeat(64),
+    });
+    assert.deepEqual(image.collections, [child.id]);
+    assert.deepEqual(image.tags, ['screen']);
+    assert.equal(image.revision, 2);
+    const restored = library.restore(image.id, 1, 2);
+    assert.deepEqual(restored.tags, []);
+    assert.deepEqual(restored.collections, []);
+    const plain = library.importAsset({
+      filename: 'a.txt',
+      mime: 'text/plain',
+      size: 1,
+      hash: 'b'.repeat(64),
+    });
+    assert.equal(plain.revision, 1);
+  } finally {
+    library.close();
     await rm(f.dir, { recursive: true, force: true });
   }
 });

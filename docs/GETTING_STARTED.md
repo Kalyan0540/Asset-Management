@@ -10,9 +10,9 @@ Open [Atlas downloads](https://github.com/Kalyan0540/Asset-Management/releases) 
 
 | Your computer | File to choose |
 |---|---|
-| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.4.1-mac-arm64.dmg` |
-| Mac with an Intel processor | `Atlas-0.4.1-mac-x64.dmg` |
-| Windows computer with an Intel/AMD processor | `Atlas-0.4.1-win-x64.exe` |
+| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.5.0-mac-arm64.dmg` |
+| Mac with an Intel processor | `Atlas-0.5.0-mac-x64.dmg` |
+| Windows computer with an Intel/AMD processor | `Atlas-0.5.0-win-x64.exe` |
 
 To check your Mac, click the **Apple menu → About This Mac**. “Chip: Apple …” means use the Apple chip download. “Processor: Intel …” means use the Intel download.
 
@@ -37,6 +37,16 @@ These early downloads are not yet signed with a verified publisher certificate o
 7. Double-click an item, or select it and press **Space**, for a larger preview. Use the arrow keys to browse; press Escape to close it.
 
 Your library is saved automatically on this computer as you import files or click Save. You do not need to “push to GitHub” to keep using the app. GitHub holds the application's code and downloads, not your personal library.
+
+## Use the compact workspace
+
+- Use **Appearance** in the top bar for **System**, **Light**, or **Dark**. The sidebar and inspector can also be hidden from the top bar.
+- Hover the magnifier for a temporary peek. Click it, tap it, or press Space for a persistent preview. The menu beside the magnifier and the context menu both open searchable item actions.
+- Create a root folder with the plus in **Folders**. Hover or focus a folder and use its add-subfolder button to nest another folder. A parent shows items in its descendants once each.
+- Paste an image into the workspace to save a timestamped file. Pasting into an editor or search field still edits the field. File imports and clipboard captures go into the active library and the selected ordinary folder, where applicable.
+- Use the **Export** menu for selected originals or Markdown and catalog JSON. The native selected-files export asks where to save, and appends numbers when a name already exists. Use a full backup for transfer or recovery.
+- In the sidebar, **Repair Eagle folders…** previews matching paths from older Eagle imports before changing their hierarchy. Unmatched path names remain in place. Take a library backup first if you want an independent recovery copy.
+- **Smart Folders** remember filters. Optional import actions can add a tag or folder membership to future matching desktop imports. Review the change in the item's revision history.
 
 ## 4. Back up your work
 

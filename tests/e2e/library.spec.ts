@@ -39,6 +39,7 @@ test('create, relate, edit, search, export, trash and restore real library items
   await page.getByLabel('Note title').fill(`Research ${unique}`);
   await page.getByLabel('Markdown content').fill('# Research\n\nLocal notes with **context**.');
   await page.getByLabel('Tags', { exact: true }).fill('research, inspiration');
+  await page.getByText('Add or remove folders', { exact: true }).click();
   await page.getByRole('checkbox', { name: `Project ${unique}`, exact: true }).check();
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Changes saved');
@@ -203,4 +204,63 @@ test('saving with a selected related item keeps the link and lets you open it', 
   await page.locator('.asset-open').filter({ hasText: filename }).click();
   await page.getByRole('button', { name: `Open linked item: ${title}` }).click();
   await expect(page.getByLabel('Note title')).toHaveValue(title);
+});
+
+test('nested folder, clipboard import, Smart Folder, and Trash Undo work across themes', async ({
+  page,
+}) => {
+  const suffix = Date.now();
+  const parent = `Project Tree ${suffix}`;
+  const child = `Pasted Images ${suffix}`;
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.getByLabel('Appearance').selectOption('dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByLabel('Appearance').selectOption('system');
+  await page.getByRole('button', { name: 'New collection' }).click();
+  await page.getByLabel('Folder name').fill(parent);
+  await page.getByLabel('Folder name').press('Enter');
+  await page.getByRole('button', { name: `Add subfolder to ${parent}` }).click();
+  await page.getByLabel('Folder name').fill(child);
+  await page.getByLabel('Folder name').press('Enter');
+  await expect(page.getByRole('heading', { name: new RegExp(child) })).toBeVisible();
+  await page.locator('main').evaluate((main) => {
+    const data = new DataTransfer();
+    const bytes = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+      ),
+      (c) => c.charCodeAt(0),
+    );
+    data.items.add(new File([bytes], 'captured.png', { type: 'image/png' }));
+    main.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+    );
+  });
+  await expect(page.getByLabel('Item title')).toHaveValue(/^Clipboard /);
+  const title = await page.getByLabel('Item title').inputValue();
+  const tree = page.getByRole('navigation', { name: 'Folder tree' });
+  await tree.getByRole('button', { name: `Collapse ${parent}` }).click();
+  await expect(tree.getByRole('button', { name: new RegExp(child) })).toHaveCount(0);
+  await tree.getByRole('button', { name: new RegExp(`^${parent} 1$`) }).click();
+  await expect(page.locator('.asset-open').filter({ hasText: title })).toBeVisible();
+  const smart = `Rule ${suffix}`;
+  await page.getByRole('button', { name: 'New Smart Folder', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'New Smart Folder' });
+  await dialog.getByLabel('Name', { exact: true }).fill(smart);
+  await dialog.getByLabel('Name filter value').fill(title);
+  await expect(dialog.getByRole('status')).toHaveText('1 matching items');
+  await dialog.getByRole('button', { name: 'Save Smart Folder' }).click();
+  await expect(page.getByRole('heading', { name: new RegExp(smart) })).toBeVisible();
+  await page.getByRole('button', { name: `Actions for ${title}` }).click();
+  await page
+    .getByRole('dialog', { name: 'Item actions' })
+    .getByRole('button', { name: 'Move to Trash', exact: true })
+    .click();
+  await expect(page.locator('.asset-open').filter({ hasText: title })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(page.locator('.asset-open').filter({ hasText: title })).toBeVisible();
 });

@@ -1,5 +1,17 @@
-import { app, BrowserWindow, Menu, dialog, shell, session, clipboard } from 'electron';
-import { join } from 'node:path';
+import {
+  nativeTheme,
+  app,
+  BrowserWindow,
+  Menu,
+  dialog,
+  shell,
+  session,
+  clipboard,
+  ipcMain,
+} from 'electron';
+import { basename, extname, join } from 'node:path';
+import { copyFile, mkdtemp, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { once } from 'node:events';
 import { createLibraryServer } from '../server/http.ts';
@@ -23,9 +35,32 @@ app.on('second-instance', () => {
   window?.focus();
 });
 const settings = () => join(app.getPath('userData'), 'preferences.json');
-function savePath() {
+function preferences(): {
+  library?: string;
+  recent?: unknown;
+  appearance?: 'system' | 'light' | 'dark';
+} {
+  try {
+    return JSON.parse(readFileSync(settings(), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+function recentLibraries(): string[] {
+  const saved = preferences().recent;
+  return Array.isArray(saved)
+    ? saved.filter((entry) => typeof entry === 'string').slice(0, 20)
+    : [];
+}
+function writePreferences(update: ReturnType<typeof preferences>) {
   mkdirSync(app.getPath('userData'), { recursive: true });
-  writeFileSync(settings(), JSON.stringify({ library: root }), { mode: 0o600 });
+  writeFileSync(settings(), JSON.stringify({ ...preferences(), ...update }), { mode: 0o600 });
+}
+function savePath() {
+  writePreferences({
+    library: root,
+    recent: [...new Set([root, ...recentLibraries()])].slice(0, 20),
+  });
 }
 async function openLibrary(path: string) {
   const next = createLibraryServer({ root: path, dist: join(__dirname, '../dist') });
@@ -97,6 +132,136 @@ function agentConfiguration() {
     },
   };
 }
+function checkWindow(event: Electron.IpcMainInvokeEvent) {
+  if (
+    !window ||
+    event.sender !== window.webContents ||
+    !event.senderFrame ||
+    event.senderFrame.parent !== null ||
+    new URL(event.senderFrame.url).origin !== origin
+  )
+    throw new Error('This action is available in the Atlas window.');
+}
+ipcMain.handle('atlas:appearance', (event) => {
+  checkWindow(event);
+  return preferences().appearance ?? 'system';
+});
+ipcMain.handle('atlas:set-appearance', (event, value: unknown) => {
+  checkWindow(event);
+  if (value !== 'light' && value !== 'dark' && value !== 'system')
+    throw new Error('Unknown appearance.');
+  writePreferences({ appearance: value });
+  nativeTheme.themeSource = value;
+});
+ipcMain.handle('atlas:libraries', (event) => {
+  checkWindow(event);
+  return {
+    active: root,
+    entries: recentLibraries().map((path) => ({ path, name: basename(path) })),
+  };
+});
+ipcMain.handle('atlas:library-action', async (event, action: string, path?: string) => {
+  checkWindow(event);
+  if (busy) return;
+  if (action === 'reveal') return shell.openPath(root);
+  if (action === 'new' || action === 'open')
+    return operation(() => chooseLibrary(action === 'new'));
+  if (
+    action === 'recent' &&
+    path &&
+    recentLibraries().includes(path) &&
+    existsSync(join(path, 'catalog.sqlite'))
+  ) {
+    return operation(async () => {
+      if (path !== root && (await confirmSwitch())) await openLibrary(path);
+    });
+  }
+  if (action === 'recent')
+    throw new Error('This library is no longer available at its saved location.');
+});
+function exportName(raw: string) {
+  let name =
+    basename(raw.replaceAll('\\', '/'))
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+      .replace(/[. ]+$/, '')
+      .slice(0, 180) || 'item';
+  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name = '_' + name;
+  return name;
+}
+ipcMain.handle('atlas:item-action', async (event, id: unknown, action: unknown) => {
+  checkWindow(event);
+  if (typeof id !== 'string' || (action !== 'open-copy' && action !== 'reveal'))
+    throw new Error('Invalid item action.');
+  const item = service!.library.get(id);
+  const path =
+    item.hash && /^[a-f0-9]{64}$/.test(item.hash) ? join(root, 'blobs', item.hash) : undefined;
+  if (action === 'reveal') {
+    if (!path || !existsSync(path)) throw new Error('The original file is unavailable.');
+    shell.showItemInFolder(path);
+    return;
+  }
+  const filename = exportName(item.kind === 'note' ? `${item.title}.md` : item.filename);
+  const allowed =
+    /^\.(png|jpe?g|gif|webp|avif|tiff?|bmp|ico|heic|svg|mp4|m4v|mov|webm|mp3|wav|ogg|flac|m4a|pdf|txt|md|csv|docx|pptx|xlsx|psd|ai|indd|fig|sketch|xcf)$/i;
+  if (!allowed.test(extname(filename)))
+    throw new Error('This file type can be exported from Atlas.');
+  const folder = await mkdtemp(join(app.getPath('temp'), 'atlas-original-'));
+  const target = join(folder, filename);
+  if (item.kind === 'note') await writeFile(target, item.body, { flag: 'wx' });
+  else {
+    if (!path) throw new Error('The original file is unavailable.');
+    await copyFile(path, target, constants.COPYFILE_EXCL);
+  }
+  const error = await shell.openPath(target);
+  if (error) throw new Error(error);
+});
+ipcMain.handle('atlas:export-originals', async (event, ids: unknown) => {
+  checkWindow(event);
+  if (
+    !Array.isArray(ids) ||
+    !ids.length ||
+    ids.length > 500 ||
+    ids.some((id) => typeof id !== 'string')
+  )
+    throw new Error('Select between 1 and 500 items.');
+  const activeService = service!;
+  const activeRoot = root;
+  const items = [...new Set(ids)].map((id) => activeService.library.get(id));
+  const destination = await dialog.showOpenDialog(window!, {
+    title: 'Choose where to export selected files',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (destination.canceled) return { count: 0, skipped: [] };
+  let count = 0;
+  const skipped: string[] = [];
+  for (const item of items) {
+    const raw = item.kind === 'note' ? `${item.title}.md` : item.filename;
+    const safe = exportName(raw);
+    const ext = extname(safe);
+    const stem = ext ? safe.slice(0, -ext.length) : safe;
+    try {
+      for (let index = 1; ; index++) {
+        const name = index === 1 ? safe : `${stem} (${index})${ext}`;
+        const target = join(destination.filePaths[0], name);
+        try {
+          if (item.kind === 'note') await writeFile(target, item.body, { flag: 'wx' });
+          else {
+            if (!item.hash || !/^[a-f0-9]{64}$/.test(item.hash))
+              throw new Error('Missing original.');
+            await copyFile(join(activeRoot, 'blobs', item.hash), target, constants.COPYFILE_EXCL);
+          }
+          count++;
+          break;
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+        }
+      }
+    } catch {
+      skipped.push(item.title);
+    }
+  }
+  return { count, skipped };
+});
 function menu() {
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
@@ -327,22 +492,22 @@ app
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
       callback(false),
     );
-    let saved: string | undefined;
-    try {
-      saved = JSON.parse(readFileSync(settings(), 'utf8')).library;
-    } catch {}
+    const saved = preferences();
+    nativeTheme.themeSource =
+      saved.appearance === 'light' || saved.appearance === 'dark' ? saved.appearance : 'system';
     await openLibrary(
-      process.env.ATLAS_LIBRARY ?? saved ?? join(app.getPath('userData'), 'Library'),
+      process.env.ATLAS_LIBRARY ?? saved.library ?? join(app.getPath('userData'), 'Library'),
     );
     window = new BrowserWindow({
       width: 1440,
       height: 940,
       minWidth: 800,
       minHeight: 600,
-      backgroundColor: '#161719',
+      backgroundColor: nativeTheme.shouldUseDarkColors ? '#191b20' : '#fdfdfe',
       show: false,
       title: 'Atlas',
       webPreferences: {
+        preload: join(__dirname, 'preload.cjs'),
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
@@ -371,7 +536,7 @@ app
     window.show();
     if (smoke) {
       await window.webContents.executeJavaScript(
-        `(async()=>{await fetch('/api/session');const result=await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Desktop smoke test',body:'# Native app'})});if(!result.ok)throw new Error('Native database write failed');const data=await (await fetch('/api/library')).json();if(!data.items.some(i=>i.title==='Desktop smoke test'))throw new Error('Native database read failed');if(!document.getElementById('root')?.textContent?.includes('All items'))throw new Error('Interface did not render');return true;})()`,
+        `(async()=>{await fetch('/api/session');const bridge=window.atlasDesktop;const libraries=await bridge.libraries();if(!libraries.active||await bridge.appearance()!=='system')throw new Error('Desktop workspace bridge failed');const result=await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Desktop smoke test',body:'# Native app'})});if(!result.ok)throw new Error('Native database write failed');const data=await (await fetch('/api/library')).json();if(!data.items.some(i=>i.title==='Desktop smoke test'))throw new Error('Native database read failed');if(!document.getElementById('root')?.textContent?.includes('All items'))throw new Error('Interface did not render');return true;})()`,
       );
       const testBackup = join(app.getPath('userData'), `Smoke Backup ${Date.now()}`);
       await createBackup(service!.library, testBackup);

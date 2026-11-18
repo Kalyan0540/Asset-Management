@@ -1,3 +1,4 @@
+import type { SmartFolder } from './filters.ts';
 import { z } from 'zod';
 
 export const names = z
@@ -17,6 +18,8 @@ export const patchSchema = z
     relations: z.array(relationSchema).max(500).optional(),
     body: z.string().max(1_000_000).optional(),
     favorite: z.boolean().optional(),
+    rating: z.number().int().min(0).max(5).optional(),
+    sourceUrl: z.union([z.literal(''), z.url({ protocol: /^https?$/ })]).optional(),
     trashed: z.boolean().optional(),
   })
   .strict();
@@ -33,6 +36,9 @@ export type Item = {
   relations: z.infer<typeof relationSchema>[];
   body: string;
   favorite: boolean;
+  rating?: number;
+  sourceUrl?: string;
+  importedAt?: string;
   trashed: boolean;
   revision: number;
   createdAt: string;
@@ -43,7 +49,12 @@ export type Item = {
   hash: string | null;
   source?: { provider: 'eagle'; id: string; metadata: Record<string, unknown> };
 };
-export type Collection = { id: string; name: string };
-export type LibrarySnapshot = { items: Item[]; collections: Collection[] };
+export type Collection = { id: string; name: string; title?: string; parentId?: string | null };
+export type LibrarySnapshot = {
+  items: Item[];
+  collections: Collection[];
+  smartFolders?: SmartFolder[];
+  tagGroups?: { name: string; tags: string[] }[];
+};
 export type HistoryEntry = { revision: number; at: string; action: string; actor: string };
 export type ItemPatch = z.input<typeof patchSchema>;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Trash2, Star, Tag, FolderPlus, Check, Maximize2 } from 'lucide-react';
 import type { Item, Collection, ItemPatch } from '../shared/model';
 
@@ -78,21 +78,60 @@ export function Lightbox({
   onPrevious: () => void;
   onNext: () => void;
 }) {
+  const [zoom, setZoom] = useState(0);
+  const [gray, setGray] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  const focus = useRef(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  );
+  useEffect(() => () => focus.current?.focus(), []);
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.code === 'Space') {
+      const target = e.target as HTMLElement;
+      const media = target.closest('video,audio');
+      if (
+        e.key === 'Escape' ||
+        (e.code === 'Space' && !media && !target.closest('button,a,input'))
+      ) {
         e.preventDefault();
         onClose();
       }
-      if (e.key === 'ArrowLeft') onPrevious();
-      if (e.key === 'ArrowRight') onNext();
+      if (!media && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        onPrevious();
+      }
+      if (!media && e.key === 'ArrowRight') {
+        e.preventDefault();
+        onNext();
+      }
+      if (e.key === 'Tab') {
+        const nodes = Array.from(
+          panel.current?.querySelectorAll<HTMLElement>(
+            'button,a,video[controls],audio[controls],iframe',
+          ) ?? [],
+        );
+        if (e.shiftKey && e.target === nodes[0]) {
+          e.preventDefault();
+          nodes.at(-1)?.focus();
+        }
+        if (!e.shiftKey && e.target === nodes.at(-1)) {
+          e.preventDefault();
+          nodes[0]?.focus();
+        }
+      }
     };
     document.addEventListener('keydown', handle);
     return () => document.removeEventListener('keydown', handle);
   }, [onClose, onNext, onPrevious]);
   const url = `/api/items/${item.id}/content`;
   return (
-    <div className="lightbox" role="dialog" aria-modal="true" aria-label={`Preview ${item.title}`}>
+    <div
+      ref={panel}
+      className="lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Preview ${item.title}`}
+    >
       <header>
         <strong>{item.title}</strong>
         <span>← → to browse · Esc to close</span>
@@ -100,9 +139,16 @@ export function Lightbox({
           <X size={22} />
         </button>
       </header>
-      <div className="lightbox-content">
+      <div className={`lightbox-content ${zoom ? 'zoom-active' : ''}`}>
         {item.mime.startsWith('image/') ? (
-          <img src={url} alt={item.title} />
+          <img
+            src={url}
+            alt={item.title}
+            style={{
+              width: zoom ? `${zoom}%` : undefined,
+              filter: gray ? 'grayscale(1)' : undefined,
+            }}
+          />
         ) : item.mime.startsWith('video/') ? (
           <video src={url} controls autoPlay />
         ) : item.mime.startsWith('audio/') ? (
@@ -120,6 +166,22 @@ export function Lightbox({
       <footer>
         <button onClick={onPrevious}>Previous</button>
         <button onClick={onNext}>Next</button>
+        {item.mime.startsWith('image/') && (
+          <>
+            <button onClick={() => setZoom(0)} aria-pressed={zoom === 0}>
+              Fit
+            </button>
+            <button onClick={() => setZoom(Math.min(400, (zoom || 100) + 50))} aria-label="Zoom in">
+              +
+            </button>
+            <button onClick={() => setZoom(zoom <= 100 ? 0 : zoom - 50)} aria-label="Zoom out">
+              −
+            </button>
+            <button onClick={() => setGray((v) => !v)} aria-pressed={gray}>
+              Grayscale
+            </button>
+          </>
+        )}
       </footer>
     </div>
   );

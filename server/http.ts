@@ -1,3 +1,4 @@
+import { smartFolderSchema } from '../shared/filters.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   createReadStream,
@@ -115,7 +116,12 @@ export function createLibraryServer(options: {
           return json(res, 200, ai.apply(aiAction[1], input.includeDescription));
         }
         if (url.pathname === '/api/library' && req.method === 'GET')
-          return json(res, 200, { items: library.list(), collections: library.collections() });
+          return json(res, 200, {
+            items: library.list(),
+            collections: library.collections(),
+            smartFolders: library.smartFolders(),
+            tagGroups: library.tagGroups(),
+          });
         if (url.pathname === '/api/manifest' && req.method === 'GET') {
           res.setHeader('Content-Disposition', 'attachment; filename="atlas-manifest.json"');
           return json(res, 200, {
@@ -123,18 +129,61 @@ export function createLibraryServer(options: {
             exportedAt: new Date().toISOString(),
             items: library.list(),
             collections: library.collections(),
+            smartFolders: library.smartFolders(),
+            tagGroups: library.tagGroups(),
           });
         }
         if (url.pathname === '/api/collections' && req.method === 'POST') {
           const input = z
-            .object({ name: z.string().trim().min(1).max(80).optional() })
+            .object({
+              name: z.string().trim().min(1).max(80).optional(),
+              parentId: z.string().uuid().nullable().optional(),
+            })
             .strict()
             .parse(await body(req));
           return json(
             res,
             201,
-            input.name ? library.createCollection(input.name) : library.createUntitledCollection(),
+            input.name
+              ? library.createCollection(input.name, input.parentId)
+              : library.createUntitledCollection(input.parentId),
           );
+        }
+        if (url.pathname === '/api/smart-folders' && req.method === 'POST')
+          return json(res, 201, library.saveSmartFolder(smartFolderSchema.parse(await body(req))));
+        const smartPath = url.pathname.match(/^\/api\/smart-folders\/([\w-]+)$/);
+        if (smartPath && req.method === 'PATCH')
+          return json(
+            res,
+            200,
+            library.saveSmartFolder(
+              smartFolderSchema.parse(await body(req)),
+              z.string().uuid().parse(smartPath[1]),
+            ),
+          );
+        if (smartPath && req.method === 'DELETE') {
+          library.deleteSmartFolder(z.string().uuid().parse(smartPath[1]));
+          return json(res, 200, { ok: true });
+        }
+        if (url.pathname === '/api/tag-groups' && req.method === 'POST') {
+          const input = z
+            .object({
+              name: z.string().trim().min(1).max(80),
+              tags: z.array(z.string().trim().min(1).max(80)).max(100),
+            })
+            .strict()
+            .parse(await body(req));
+          library.setTagGroup(input.name, [...new Set(input.tags)]);
+          return json(res, 200, { ok: true });
+        }
+        if (url.pathname === '/api/eagle/folder-repair' && req.method === 'GET')
+          return json(res, 200, library.eagleFolderRepair());
+        if (url.pathname === '/api/eagle/folder-repair' && req.method === 'POST') {
+          const input = z
+            .object({ key: z.string().regex(/^[0-9a-f]{64}$/) })
+            .strict()
+            .parse(await body(req));
+          return json(res, 200, library.repairEagleFolders(input.key));
         }
         const collectionPath = url.pathname.match(/^\/api\/collections\/([\w-]+)$/);
         if (collectionPath && req.method === 'PATCH') {
@@ -214,6 +263,9 @@ export function createLibraryServer(options: {
                 hash: digest,
               },
               actor,
+              url.searchParams.has('folder')
+                ? z.string().uuid().parse(url.searchParams.get('folder'))
+                : undefined,
             );
             return json(res, 201, item);
           } finally {

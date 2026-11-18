@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Item } from '../shared/model';
 import type { Dimensions } from './Gallery';
 
-function colors(image: HTMLImageElement) {
+export function imageColors(image: HTMLImageElement) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 40;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -37,9 +37,16 @@ function colors(image: HTMLImageElement) {
         .toUpperCase(),
   );
 }
-export function ImageProperties({ item }: { item: Item }) {
+export function ImageProperties({
+  item,
+  onFilter,
+}: {
+  item: Item;
+  onFilter: (color: string) => void;
+}) {
   const [palette, setPalette] = useState<string[]>([]);
   const [dimensions, setDimensions] = useState<Dimensions>();
+  const [swatch, setSwatch] = useState('');
   const [copied, setCopied] = useState('');
   useEffect(() => {
     setPalette([]);
@@ -50,7 +57,7 @@ export function ImageProperties({ item }: { item: Item }) {
     image.onload = () => {
       setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
       try {
-        setPalette(colors(image));
+        setPalette(imageColors(image));
       } catch {}
     };
     image.src = `/api/items/${item.id}/content`;
@@ -58,14 +65,14 @@ export function ImageProperties({ item }: { item: Item }) {
       image.onload = null;
     };
   }, [item.id, item.mime]);
-  const source = item.source?.metadata.url;
-  const rawRating = item.source?.metadata.star ?? item.source?.metadata.rating;
+  const source = item.sourceUrl ?? item.source?.metadata.url;
+
   let url: URL | undefined;
   try {
     const parsed = new URL(typeof source === 'string' ? source : '');
     if (['https:', 'http:'].includes(parsed.protocol)) url = parsed;
   } catch {}
-  if (!dimensions && !url && typeof rawRating !== 'number') return null;
+  if (!dimensions && !url) return null;
   return (
     <div className="image-properties">
       {palette.length > 0 && (
@@ -83,8 +90,24 @@ export function ImageProperties({ item }: { item: Item }) {
                   .then(() => setCopied(color))
                   .catch(() => setCopied(''));
               }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setSwatch(color);
+              }}
             />
           ))}
+          {swatch && (
+            <button
+              type="button"
+              className="swatch-filter"
+              onClick={() => {
+                onFilter(swatch);
+                setSwatch('');
+              }}
+            >
+              Find color {swatch}
+            </button>
+          )}
           {copied && <small role="status">Copied {copied}</small>}
         </div>
       )}
@@ -93,7 +116,6 @@ export function ImageProperties({ item }: { item: Item }) {
           {dimensions.width} × {dimensions.height} px
         </div>
       )}
-      {typeof rawRating === 'number' && rawRating > 0 && <div>Eagle rating {rawRating}/5</div>}
       {url && (
         <a href={url.href} target="_blank" rel="noreferrer" title={url.href}>
           {url.hostname} ↗

@@ -28,7 +28,7 @@ export function Gallery({
     const h = d?.height ?? Number(i.source?.metadata.height);
     return w > 0 && h > 0 ? Math.max(0.23, Math.min(4, w / h)) : 1.25;
   };
-  const gap = 12;
+  const gap = 10;
   if (view === 'justified' && width > 0) {
     const rows: { items: Item[]; ratio: number; height: number }[] = [];
     let row: Item[] = [],
@@ -74,7 +74,7 @@ export function Gallery({
       const col = heights.indexOf(Math.min(...heights));
       const top = heights[col];
       const height = Math.round(Math.min(columnWidth / ratio(item), columnWidth * 3));
-      heights[col] += height + 60 + gap;
+      heights[col] += height + 42 + gap;
       return { item, col, height, top };
     });
     return (

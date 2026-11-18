@@ -1,7 +1,9 @@
+import { matchesSmartFolder, smartFolderSchema, type SmartFolder } from '../shared/filters.ts';
+import { eagleFolders } from './eagle-folders.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   noteSchema,
   patchSchema,
@@ -45,6 +47,12 @@ export class Library {
       INSERT INTO schema_info SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM schema_info);
       CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS collections(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE);
+      CREATE TABLE IF NOT EXISTS collection_tree(
+        id TEXT PRIMARY KEY REFERENCES collections(id) ON DELETE CASCADE,
+        parent_id TEXT REFERENCES collections(id), title TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS smart_folders(id TEXT PRIMARY KEY,data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS tag_groups(name TEXT PRIMARY KEY,data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS history(item_id TEXT NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
         action TEXT NOT NULL, actor TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY(item_id, revision));`);
     if (
@@ -70,32 +78,174 @@ export class Library {
     return JSON.parse(row.data);
   }
   collections(): Collection[] {
-    return this.db.prepare('SELECT id,name FROM collections ORDER BY name').all() as Collection[];
+    return this.db
+      .prepare(
+        'SELECT c.id,c.name,coalesce(t.title,c.name) AS title,t.parent_id AS parentId FROM collections c LEFT JOIN collection_tree t ON t.id=c.id ORDER BY title,c.id',
+      )
+      .all() as Collection[];
   }
-  createCollection(name: string) {
-    const existing = this.collections().find((c) => c.name === name);
-    if (existing) return existing;
-    const collection = { id: randomUUID(), name };
-    this.db.prepare('INSERT INTO collections(id,name) VALUES(?,?)').run(collection.id, name);
-    return collection;
+  private addCollection(title: string, parentId: string | null, legacyName?: string, reuse = true) {
+    const folders = this.collections();
+    const parent = parentId ? folders.find((folder) => folder.id === parentId) : undefined;
+    if (parentId && !parent) throw new LibraryError(400, 'Parent folder not found.');
+    const existing = folders.find(
+      (folder) => folder.title === title && folder.parentId === parentId,
+    );
+    if (existing && reuse) return existing;
+    const id = randomUUID();
+    let name = legacyName ?? (parent ? `${parent.name} / ${title}` : title);
+    if (folders.some((folder) => folder.name === name)) name += ` [${id}]`;
+    this.db.prepare('INSERT INTO collections(id,name) VALUES(?,?)').run(id, name);
+    this.db.prepare('INSERT INTO collection_tree VALUES(?,?,?)').run(id, parentId, title);
+    return { id, name, title, parentId };
   }
-  createUntitledCollection() {
+  createCollection(name: string, parentId: string | null = null) {
+    return this.transaction(() => this.addCollection(name, parentId));
+  }
+  importEagleCollections(input: unknown) {
     return this.transaction(() => {
-      const names = new Set(this.collections().map((c) => c.name));
-      let name = 'Untitled folder';
-      for (let n = 2; names.has(name); n++) name = `Untitled folder ${n}`;
-      return this.createCollection(name);
+      const mapped = new Map<string, string>();
+      for (const folder of eagleFolders(input)) {
+        const parent = folder.parentId ? mapped.get(folder.parentId)! : null;
+        mapped.set(folder.id, this.addCollection(folder.title, parent, folder.oldName, false).id);
+      }
+      return mapped;
     });
   }
-  renameCollection(id: string, name: string) {
+  createUntitledCollection(parentId: string | null = null) {
     return this.transaction(() => {
-      const existing = this.db.prepare('SELECT id FROM collections WHERE name=?').get(name);
-      if (existing && existing.id !== id)
-        throw new LibraryError(409, 'A folder already uses this name.');
-      const result = this.db.prepare('UPDATE collections SET name=? WHERE id=?').run(name, id);
-      if (!result.changes) throw new LibraryError(404, 'Folder not found.');
-      return { id, name };
+      const names = new Set(
+        this.collections()
+          .filter((folder) => folder.parentId === parentId)
+          .map((folder) => folder.title),
+      );
+      let title = 'Untitled folder';
+      for (let n = 2; names.has(title); n++) title = `Untitled folder ${n}`;
+      return this.addCollection(title, parentId);
     });
+  }
+  renameCollection(id: string, title: string) {
+    return this.transaction(() => {
+      const folders = this.collections();
+      const folder = folders.find((candidate) => candidate.id === id);
+      if (!folder) throw new LibraryError(404, 'Folder not found.');
+      if (
+        folders.some(
+          (candidate) =>
+            candidate.id !== id &&
+            candidate.title === title &&
+            candidate.parentId === folder.parentId,
+        )
+      )
+        throw new LibraryError(409, 'A folder at this level already uses this name.');
+      const parent = folders.find((candidate) => candidate.id === folder.parentId);
+      let name = parent ? `${parent.name} / ${title}` : title;
+      if (folders.some((candidate) => candidate.id !== id && candidate.name === name))
+        name += ` [${id}]`;
+      this.db.prepare('UPDATE collections SET name=? WHERE id=?').run(name, id);
+      this.db
+        .prepare(
+          'INSERT INTO collection_tree VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title',
+        )
+        .run(id, folder.parentId ?? null, title);
+      return { id, name, title, parentId: folder.parentId ?? null };
+    });
+  }
+  eagleFolderRepair() {
+    const exists = this.db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='import_reports'")
+      .get();
+    const row = exists
+      ? (this.db.prepare('SELECT data FROM import_reports ORDER BY rowid DESC LIMIT 1').get() as
+          { data: string } | undefined)
+      : undefined;
+    const report = row ? JSON.parse(row.data) : null;
+    const folders = this.collections();
+    const parentMatches = new Map<string, Collection>();
+    const changes: { id: string; parentId: string; title: string; from: string }[] = [];
+    const skipped: string[] = [];
+    if (report?.format === 'atlas-eagle-import' && !report.folderTreePreserved) {
+      for (const source of eagleFolders(report.libraryMetadata.folders)) {
+        const match = folders.find((folder) => folder.name === source.oldName);
+        const parent = source.parentId ? parentMatches.get(source.parentId) : undefined;
+        if (!match || (source.parentId && !parent)) {
+          skipped.push(source.oldName);
+          continue;
+        }
+        if (parent && match.parentId !== parent.id) {
+          if (match.parentId || parent.id === match.id) {
+            skipped.push(source.oldName);
+            continue;
+          }
+          changes.push({
+            id: match.id,
+            parentId: parent.id,
+            title: source.title,
+            from: match.name,
+          });
+        }
+        parentMatches.set(source.id, match);
+      }
+    }
+    const key = createHash('sha256')
+      .update(JSON.stringify({ folders, changes, skipped }))
+      .digest('hex');
+    return { changes, skipped, key };
+  }
+  repairEagleFolders(key: string) {
+    return this.transaction(() => {
+      const plan = this.eagleFolderRepair();
+      if (key !== plan.key)
+        throw new LibraryError(409, 'The folders changed. Review the repair again.');
+      const set = this.db.prepare(
+        'INSERT INTO collection_tree VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title',
+      );
+      for (const folder of plan.changes) set.run(folder.id, folder.parentId, folder.title);
+      return plan;
+    });
+  }
+  smartFolders(): SmartFolder[] {
+    return (
+      this.db.prepare('SELECT data FROM smart_folders ORDER BY rowid').all() as { data: string }[]
+    ).map((row) => JSON.parse(row.data));
+  }
+  saveSmartFolder(input: unknown, id = randomUUID() as string) {
+    const data = smartFolderSchema.parse(input);
+    if (data.addFolder && !this.collections().some((folder) => folder.id === data.addFolder))
+      throw new LibraryError(400, 'The import rule folder does not exist.');
+    if (
+      (data.addFolder || data.addTag) &&
+      data.rules.some((rule) => ['shape', 'color'].includes(rule.field))
+    )
+      throw new LibraryError(
+        400,
+        'Automatic import actions need rules that can be evaluated before previewing a file.',
+      );
+    const folder = { ...data, id };
+    this.db
+      .prepare(
+        'INSERT INTO smart_folders VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data',
+      )
+      .run(id, JSON.stringify(folder));
+    return folder;
+  }
+  deleteSmartFolder(id: string) {
+    this.db.prepare('DELETE FROM smart_folders WHERE id=?').run(id);
+  }
+  tagGroups(): { name: string; tags: string[] }[] {
+    return (
+      this.db.prepare('SELECT name,data FROM tag_groups ORDER BY name').all() as {
+        name: string;
+        data: string;
+      }[]
+    ).map((row) => ({ name: row.name, tags: JSON.parse(row.data) }));
+  }
+  setTagGroup(name: string, tags: string[]) {
+    this.db
+      .prepare(
+        'INSERT INTO tag_groups VALUES(?,?) ON CONFLICT(name) DO UPDATE SET data=excluded.data',
+      )
+      .run(name, JSON.stringify(tags));
   }
   private save(item: Item, action: string, actor: string) {
     this.db
@@ -147,11 +297,39 @@ export class Library {
       this.save({ ...this.base(title), body, size: Buffer.byteLength(body) }, 'create note', actor),
     );
   }
-  importAsset(data: { filename: string; mime: string; size: number; hash: string }, actor = 'ui') {
-    // Deduplicate bytes, not logical records: each import may carry different context.
-    return this.transaction(() =>
-      this.save({ ...this.base(data.filename), ...data, kind: 'asset' }, 'import', actor),
-    );
+  importAsset(
+    data: { filename: string; mime: string; size: number; hash: string },
+    actor = 'ui',
+    collection?: string,
+  ) {
+    return this.transaction(() => {
+      const item: Item = {
+        ...this.base(data.filename),
+        ...data,
+        kind: 'asset',
+        importedAt: new Date().toISOString(),
+      };
+      if (collection) {
+        if (!this.collections().some((folder) => folder.id === collection))
+          throw new LibraryError(400, 'Import folder not found.');
+        item.collections = [collection];
+      }
+      const rules = this.smartFolders().filter(
+        (folder) => (folder.addTag || folder.addFolder) && matchesSmartFolder(item, folder),
+      );
+      this.save(item, 'import', actor);
+      if (!rules.length) return item;
+      const tags = [
+        ...new Set(rules.flatMap((folder) => (folder.addTag ? [folder.addTag] : []))),
+      ].slice(0, 100);
+      const collections = [
+        ...new Set([
+          ...item.collections,
+          ...rules.flatMap((folder) => (folder.addFolder ? [folder.addFolder] : [])),
+        ]),
+      ].slice(0, 100);
+      return this.save({ ...item, tags, collections, revision: 2 }, 'import rules', actor);
+    });
   }
   importEagleItem(data: Omit<Item, 'id' | 'revision'>) {
     return this.transaction(() =>
@@ -231,6 +409,8 @@ export class Library {
         relations: old.relations,
         ...(old.kind === 'note' ? { body: old.body } : {}),
         favorite: old.favorite,
+        rating: old.rating ?? 0,
+        sourceUrl: old.sourceUrl ?? '',
         trashed: old.trashed,
       },
       actor,

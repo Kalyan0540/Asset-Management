@@ -1,3 +1,17 @@
+# Atlas 0.5.0
+
+- Compact desktop gallery with captions beneath thumbnails, smaller navigation and inspector controls, and System, Light and Dark appearance.
+- Hide either side panel, peek at images and video from the magnifier, zoom the main image preview, or play video in its tile while hovering.
+- Browse a real folder tree, create subfolders, and include their items in the parent view. New Eagle imports preserve the tree. The sidebar offers a preview and repair for older flattened imports.
+- Save a group of filters as a Smart Folder. Optional rules add tags or folder membership on future desktop imports. Use All Tags to find tags and organize tag groups.
+- Paste images into the library, search recent terms, use a searchable item menu, and undo moving an item to Trash.
+- Open recent libraries from the sidebar. Export selected originals and notes to a chosen folder. The catalog export and full library backup remain distinct.
+- The local read-only MCP server remains available to compatible agents through **Agents → Copy Read-only MCP Configuration**, with a Codex shortcut in the same menu. Markdown, links, relations, history and graph remain available.
+
+[Setup guide](https://github.com/Kalyan0540/Asset-Management/blob/v0.5.0/docs/GETTING_STARTED.md) · [Android preview](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.3.0-preview)
+
+Android continues to use its existing offline preview interface. These desktop updates leave additional integrations such as cross-library merge, reverse-image providers, hosted ChatGPT access, and automatic device sync for later.
+
 # Atlas 0.4.1
 
 Choose a related item in the inspector and click **Save changes**. Atlas now saves the selected relation directly, and you can click the saved link to open its target. Saving a Markdown note keeps the current Write or Read view.
