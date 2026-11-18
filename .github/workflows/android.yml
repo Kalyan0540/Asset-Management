@@ -54,6 +54,8 @@ jobs:
             adb exec-out run-as cool.atlas.library tar -C files -cf - interop-backup > android/interop-backup.tar
             tar -xf android/interop-backup.tar -C android
             node --import tsx scripts/transfer-fixture.ts verify
+            adb uninstall cool.atlas.library
+            adb install android/app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n cool.atlas.library/.MainActivity
             adb shell screencap -p /sdcard/atlas-android.png
             adb pull /sdcard/atlas-android.png android/atlas-android.png
