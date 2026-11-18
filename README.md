@@ -2,13 +2,13 @@
 
 A local-first asset library inspired by Eagle, with Markdown notes, collections, tags, typed relations and agent access. The compact desktop workspace supports System, Light, and Dark appearance. **This is an early desktop release, not the complete planned product.**
 
-The desktop app imports Eagle libraries and includes tags, folders, previews, a Markdown editor, backups, and local Codex access. The Android preview stores files and notes offline and supports manual backup transfer.
+The desktop app imports Eagle libraries and includes tags, folders, previews, a Markdown editor, backups, and local Codex access. The Android preview stores files and notes offline, accepts shared captures, and supports manual backup transfer.
 
 ## Downloads
 
 Open [GitHub Releases](https://github.com/Kalyan0540/Asset-Management/releases) and choose the newest published desktop release. Under **Assets**, pick `mac-arm64.dmg` for an Apple-chip Mac, `mac-x64.dmg` for an Intel Mac, or `win-x64.exe` for 64-bit Windows. [Desktop setup](docs/GETTING_STARTED.md)
 
-[Download the Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) · [Android setup](docs/ANDROID.md)
+[Download the Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.4.2-preview/Atlas-0.4.2-android-preview.apk) · [Android setup](docs/ANDROID.md)
 
 Use **Atlas Capture** to save browser links, images, excerpts and screenshots to Atlas desktop. [Chrome preview setup](docs/CHROME_CAPTURE.md)
 

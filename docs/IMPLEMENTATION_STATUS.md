@@ -7,7 +7,7 @@
 - Live Markdown headings, stable inline image imports, a caret-positioned picker, multi-item links and typed relations. Independent desktop tabs restore workspace state, and a note can open alongside its local graph.
 - The inspector offers swatch coverage, supported color copy formats and primary color. Export includes CSV and single-image resizing or conversion. Folders have a deletion preview and undo, while tag and folder filters support multiple includes and excludes.
 - Local AI supports note drafts and a persisted batch suggestion queue for tags, descriptions, folder memberships and related items. Selection of automatic tags and existing folder memberships is explicit per batch. Generic desktop MCP includes a proposal tool when write tools are enabled.
-- Android adds the share review and recoverable inbox, native photo selection, nested folders, Grid and List, Smart Folders, Markdown links and images, a local connections list, and revision history.
+- Android adds the share review and recoverable inbox, native photo selection, nested folders, Grid and List, Smart Folders, Markdown links and images, a local connection graph, batch organization, reviewable Ollama-compatible AI, and revision history.
 
 ## Chrome Capture preview
 

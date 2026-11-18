@@ -80,7 +80,7 @@ export function GraphView({
       }),
     [items, itemMap],
   );
-  const elements = useMemo(() => {
+  const { elements, shownCount, matchCount } = useMemo(() => {
     const matching = relationship ? links.filter((link) => link.label === relationship) : links;
     const neighborhood = new Set([focus]);
     if (focus)
@@ -101,16 +101,55 @@ export function GraphView({
     );
     const edges = matching.filter((link) => shown.has(link.source) && shown.has(link.target));
     const linked = new Set(edges.flatMap(({ source, target }) => [source, target]));
-    const nodes = items.filter(
+    const matchingNodes = items.filter(
       (item) => shown.has(item.id) && (orphans || linked.has(item.id) || item.id === focus),
     );
-    return [
-      ...nodes.map((item): ElementDefinition => ({
-        data: { id: item.id, label: item.title, kind: item.kind },
-      })),
-      ...edges.map((data): ElementDefinition => ({ data })),
-    ];
-  }, [items, links, focus, orphans, attachments, tag, relationship, onlyAssets]);
+    let visible = matchingNodes;
+    if (matchingNodes.length > 600) {
+      const adjacent = new Map<string, string[]>();
+      for (const { source, target } of edges) {
+        const outgoing = adjacent.get(source) ?? [];
+        outgoing.push(target);
+        adjacent.set(source, outgoing);
+        const incoming = adjacent.get(target) ?? [];
+        incoming.push(source);
+        adjacent.set(target, incoming);
+      }
+      const seeds = [...matchingNodes].sort(
+        (a, b) => (adjacent.get(b.id)?.length ?? 0) - (adjacent.get(a.id)?.length ?? 0),
+      );
+      const queued = new Set<string>();
+      const order: string[] = [];
+      function add(id: string) {
+        if (order.length >= 600 || queued.has(id)) return;
+        queued.add(id);
+        order.push(id);
+      }
+      if (focus) add(focus);
+      let cursor = 0;
+      for (const seed of seeds) {
+        add(seed.id);
+        while (cursor < order.length && order.length < 600)
+          for (const id of adjacent.get(order[cursor++]) ?? []) add(id);
+        if (order.length >= 600) break;
+      }
+      visible = order.flatMap((id) => itemMap.get(id) ?? []);
+    }
+    const visibleIds = new Set(visible.map((item) => item.id));
+    return {
+      elements: [
+        ...visible.map((item): ElementDefinition => ({
+          data: { id: item.id, label: item.title, kind: item.kind },
+        })),
+        ...edges
+          .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
+          .slice(0, 3200)
+          .map((data): ElementDefinition => ({ data })),
+      ],
+      shownCount: visible.length,
+      matchCount: matchingNodes.length,
+    };
+  }, [items, itemMap, links, focus, orphans, attachments, tag, relationship, onlyAssets]);
 
   useEffect(() => {
     const style = getComputedStyle(document.documentElement);
@@ -246,7 +285,7 @@ export function GraphView({
       }
       instance
         .layout({
-          name: elements.length < 275 ? 'cose' : 'circle',
+          name: elements.length < 185 ? 'cose' : 'circle',
           animate: false,
           fit: true,
           padding: 44,
@@ -267,7 +306,11 @@ export function GraphView({
   function center(id: string) {
     const instance = graph.current;
     const node = instance?.getElementById(id);
-    if (!node?.length) return;
+    if (!node?.length) {
+      setFocus(id);
+      setCurrent(id);
+      return;
+    }
     instance?.$('node:selected').unselect();
     node.select();
     setCurrent(id);
@@ -374,6 +417,12 @@ export function GraphView({
             Assets only
           </label>
         </details>
+        {shownCount < matchCount && (
+          <small className="graph-display-count">
+            Showing {shownCount} of {matchCount} matching items. Search any item or narrow the graph
+            with filters.
+          </small>
+        )}
         <div className="graph-commands">
           {focus ? (
             <button className="text-button" onClick={() => setFocus('')}>
