@@ -927,6 +927,20 @@
 .inspector form {
   gap: 8px;
 }
+.inspector fieldset,
+.inspector .relation-add select {
+  min-inline-size: 0;
+}
+.inspector .relation-add select {
+  flex: 1;
+}
+.inspector .detail-actions {
+  flex-wrap: wrap;
+}
+.inspector .image-properties a {
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
 .inspector label,
 .inspector legend,
 .inspector small,
