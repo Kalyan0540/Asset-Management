@@ -12,6 +12,8 @@ The Android preview already accepts shared files and text through the Android Sh
 | **Share selected text** | Send the highlighted text to Atlas as a quote, with the page URL when the source includes it. Let the user add the source link before saving if it came through separately. |
 | Multiple image files or a screenshot | Accept multiple shares in one review. Users can crop with Android's screenshot editor and **Share → Atlas** afterward. |
 
+In Pinterest, try **Download image** on an image Pin and pick the saved file in Atlas. The option varies by Pin. When Pinterest shares a Pin link, save the link with the Pin title and offer a later attachment. In Google Images, open the publisher page when you want its image and source together. If Google shares only an address, the capture review should say **Save link**. If you share a downloaded file afterward, Atlas should let you add the source to that file. [Pinterest download help](https://help.pinterest.com/en/article/download-an-image) · [Google Images sharing help on Android](https://support.google.com/websearch/answer/118238?co=GENIE.Platform%3DAndroid)
+
 ## What would make it feel like Brave
 
 1. **Start with the native share target.** Keep common saves to a preview and one confirmation. Preserve the original bytes and source type, and make the last-used folder and tags available. Show when the app saved a link, a quote, or an actual image. Test with Chrome, Brave, Google Photos, Pinterest and the Android screenshot tool on physical devices.
