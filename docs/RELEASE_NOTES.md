@@ -22,7 +22,7 @@ Choose the installer for your computer under **Assets**. [Desktop setup](https:/
 - In **All Tags**, click the pencil next to a tag to review a rename or merge. Tag groups can also be renamed, combined or removed.
 - Choose **Search web by image** from an image's item menu. Atlas prepares a temporary copy for Google Lens or TinEye. You decide whether to upload it in your browser.
 
-Use **Assets** below to download the installer for your computer. [Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.6.0/docs/GETTING_STARTED.md) · [Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk)
+The 0.6.0 development changes shipped with the 0.7.0 installers. [Atlas 0.7.0 downloads](https://github.com/Kalyan0540/Asset-Management/releases/tag/v0.7.0) · [Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk)
 
 ## Atlas 0.5.1
 

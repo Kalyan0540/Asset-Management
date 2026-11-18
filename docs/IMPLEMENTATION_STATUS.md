@@ -1,4 +1,4 @@
-# Implementation status — Atlas 0.6 desktop and Android preview
+# Implementation status — Atlas 0.8 desktop and Android preview
 
 18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
 
@@ -66,7 +66,7 @@ AI tests use a deterministic local HTTP model fixture. They establish protocol, 
 |---|---|
 | Android | Durable share-sheet/background recovery, graph/table/AI/MCP parity, history-restore UI, production signing and physical-device testing; initial native offline app and manual transfer implemented |
 | Multi-device | Sync transport, paired devices, resumable verified media transfer, operation IDs, conflict queue, old-device rebase and remote backups |
-| Browser capture | Chrome extension, website image/text/bookmark capture, screenshots, durable native bridge |
+| Browser capture | Durable capture queue for when Atlas is closed, wider site compatibility, and Chrome Web Store distribution |
 | Migration | Real-world Eagle fixture validation, additional layouts/.eaglepack support and incremental merge; richer Obsidian import; import Markdown assets as editable notes |
 | Knowledge tools | External Markdown reconciliation, autosaved drafts, rendered editing, wiki-link resolution/backlinks, embeds, custom property schemas, independent records, formulas and rollups |
 | AI | Provider credentials, hosted adapters, model installation, persisted work queue/resume, OCR, embeddings, visual similarity, controlled-vocabulary rules and evaluation sets |

@@ -31,21 +31,21 @@ These early downloads are not yet signed with a verified publisher certificate o
 1. Click **Import files**, or drag a few images, videos or documents into the window. Atlas copies the files; the originals stay where they were.
 2. Click an item. Edit the title, description, or tags in the right panel. Atlas saves edits automatically in 0.7 and newer.
 3. Use **+** next to Collections to make a folder-like collection. An item can belong to more than one collection without duplicating its file.
-4. Click **New note** to open a new note in the center. Type `/` at the start of a line for headings, lists and other commands. Use **Link an item** to link a note or embed an image, **Read** to see the formatted result, and let Atlas autosave the note. Saved links appear in Graph when both items are in the current view.
-5. Hover over an asset and click its magnifying glass to open Quick Preview. On a touch screen, the button is visible on the card. Choose Grid, Justified or Waterfall from the view controls. Select an image to copy colors from the inspector.
-6. Use the checkboxes on cards to select several items and tag, collect, favorite or trash them together. A stale item causes the whole batch to stop rather than partially overwrite changes.
-7. Double-click an item, or select it and press **Space**, for a larger preview. Use the arrow keys to browse; press Escape to close it.
+4. Choose **New → New note** to open the editor in the center. Type `/` at the start of a line for headings, lists and other commands. Use **Link an item** to link a note or embed an image. Atlas autosaves the note. Saved links appear in Graph when both items are in the current view.
+5. Hover the magnifying glass for a quick peek, or click it to open the preview. On a touch screen, tap the magnifying glass. Use **Grid** or **List** to browse and **View options** to switch to Justified or Waterfall. Select an image to copy colors from the inspector.
+6. Use Shift-click to select a range, or drag a selection rectangle from empty space. You can tag, collect, favorite or trash the selected items together.
+7. Double-click an asset for a larger preview in the center. Use the arrow keys to browse and press Escape to return to the gallery.
 
 Your library is saved automatically on this computer as you import files and make edits. You do not need to “push to GitHub” to keep using the app. GitHub holds the application's code and downloads, not your personal library.
 
 ## Use the compact workspace
 
-- Use **Appearance** in the top bar for **System**, **Light**, or **Dark**. The sidebar and inspector can also be hidden from the top bar.
-- Hover the magnifier for a temporary peek. Click it, tap it, or press Space for a persistent preview. The menu beside the magnifier and the context menu both open searchable item actions.
-- Create a root folder with the plus in **Folders**. Hover or focus a folder and use its add-subfolder button to nest another folder. A parent shows items in its descendants once each.
+- Use **Appearance** in the top bar for **System**, **Light**, or **Dark**. Press **Ctrl+/** or **Command+/** to hide or restore both side panels.
+- Right-click a thumbnail to open its searchable actions.
+- Use the plus next to **Folders** to create a root folder. Right-click an existing folder and choose **New subfolder** to nest one. A parent lists its subfolders first. Turn on **Show subfolder contents** to include their items in the gallery below.
 - Paste an image into the workspace to save a timestamped file. Pasting into an editor or search field still edits the field. File imports and clipboard captures go into the active library and the selected ordinary folder, where applicable.
 - Use the **Export** menu for selected originals or Markdown and catalog JSON. The native selected-files export asks where to save, and appends numbers when a name already exists. Use a full backup for transfer or recovery.
-- In the sidebar, **Repair Eagle folders…** previews matching paths from older Eagle imports before changing their hierarchy. Unmatched path names remain in place. Take a library backup first if you want an independent recovery copy.
+- In the library picker, **Repair Eagle folders…** previews matching paths from older Eagle imports before changing their hierarchy. Unmatched path names remain in place. Take a library backup first if you want an independent recovery copy.
 - **Smart Folders** remember filters. Optional import actions can add a tag or folder membership to future matching desktop imports. Review the change in the item's revision history.
 - In **All Tags**, click the pencil beside a tag. Enter a new name to rename it, or enter an existing tag to combine them. **Review changes** shows which items, tag groups and smart folders will be affected. Edit a tag group to rename it, combine it with another group by entering that group's name, or remove it.
 - Right-click a PNG, JPEG, GIF, WebP or AVIF image and choose **Search web by image**. Pick Google Lens or TinEye. Atlas prepares a temporary image copy and opens your browser. To share that copy with the provider, choose **Search by image → Upload a file** on Google or **Upload** on TinEye. [Google Lens help](https://support.google.com/websearch/answer/1325808) · [TinEye help](https://tineye.com/how)
@@ -74,8 +74,12 @@ Select a note or a PNG/JPEG/WebP image and click **Suggest tags & description**.
 
 Choose **Library → Import Eagle Library…** and follow the [Eagle import guide](EAGLE_IMPORT.md). Close Eagle first. Atlas creates a separate library and reports anything it could not import.
 
+## Save from Chrome
+
+Use **Atlas Capture** with desktop Atlas 0.8.0 or newer. It saves links, text, images and screenshots directly to your open library. [Install and pair Atlas Capture](CHROME_CAPTURE.md)
+
 ## Connect a local agent
 
 For Codex, follow the [Codex setup guide](CODEX.md). If you use another local AI agent that supports MCP, choose **Agents → Copy Read-only MCP Configuration** in Atlas. Paste it into the agent's MCP settings and leave Atlas open. This lets the agent search and read the library without giving it edit tools; no developer installation is required for this connection.
 
-Automatic multi-device sync, the Chrome capture extension, advanced note/table features, large-library performance work, and many specialist file previews remain pending. Android currently offers a smaller offline feature set. The table currently displays asset metadata; it is not yet a complete Notion-style database. The graph shows explicit relations; it does not yet parse every Obsidian-style link. These limits are recorded in the [implementation status](IMPLEMENTATION_STATUS.md) and full [project plan](PROJECT_PLAN.md).
+See the implementation status and the full project plan for upcoming features, including automatic device sync, the mobile capture workflow, and specialist file previews. [Implementation status](IMPLEMENTATION_STATUS.md) · [Project plan](PROJECT_PLAN.md)
