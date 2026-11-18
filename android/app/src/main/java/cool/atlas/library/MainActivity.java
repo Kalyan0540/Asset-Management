@@ -145,6 +145,10 @@ public final class MainActivity extends Activity {
           if (item.optString("kind").equals("folder")) { selectedFilter = item.optString("id"); refresh(); }
           else details(item);
         });
+    grid.setOnItemLongClickListener((parent, view, position, id) -> {
+      if (!app.busy && !visible.get(position).optString("kind").equals("folder")) selectItems(visible.get(position));
+      return true;
+    });
     if (saved != null) {
       search.setText(saved.getString("query", ""));
       selectedFilter = saved.getString("filter", "all");
@@ -798,6 +802,59 @@ public final class MainActivity extends Activity {
                         + " or transfer a verified backup between Android and desktop.");
             })
         .show();
+  }
+
+  private void selectItems(JSONObject first) {
+    List<JSONObject> items = new ArrayList<>();
+    for (JSONObject item : visible) if (!item.optString("kind").equals("folder")) items.add(item);
+    if (items.isEmpty()) return;
+    String[] titles = new String[items.size()];
+    boolean[] checked = new boolean[items.size()];
+    for (int i=0;i<items.size();i++) {
+      titles[i] = items.get(i).optString("title");
+      checked[i] = items.get(i).optString("id").equals(first.optString("id"));
+    }
+    new AlertDialog.Builder(this).setTitle("Select library items")
+        .setMultiChoiceItems(titles,checked,(dialog,index,value) -> checked[index] = value)
+        .setNegativeButton("Cancel",null).setPositiveButton("Organize",(dialog,which) -> {
+          List<JSONObject> selected = new ArrayList<>();
+          for (int i=0;i<items.size();i++) if (checked[i]) selected.add(items.get(i));
+          if (!selected.isEmpty()) organizeSelection(selected);
+        }).show();
+  }
+
+  private void organizeSelection(List<JSONObject> selected) {
+    try {
+      LinearLayout options = new LinearLayout(this);
+      options.setOrientation(LinearLayout.VERTICAL);
+      options.setPadding(dp(16),0,dp(16),dp(8));
+      EditText tags = field("Add tags", "", false);
+      options.addView(tags);
+      List<JSONObject> folders = app.store.collections();
+      List<String> names = new ArrayList<>();
+      names.add("Keep existing folders");
+      for (JSONObject folder : folders) names.add(folder.getString("name"));
+      Spinner destination = new Spinner(this);
+      destination.setContentDescription("Add to folder");
+      destination.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names));
+      options.addView(destination);
+      boolean restore = selectedFilter.equals("trash");
+      CheckBox trash = new CheckBox(this);
+      trash.setText(restore ? "Restore from Trash" : "Move to Trash");
+      options.addView(trash);
+      AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Organize " + selected.size() + " items")
+          .setView(options).setNegativeButton("Cancel",null).setPositiveButton("Apply",null).create();
+      dialog.setOnShowListener(ignored -> dialog.getButton(-1).setOnClickListener(button -> {
+        try {
+          int position = destination.getSelectedItemPosition();
+          app.store.organizeItems(selected,tagValues(tags.getText().toString()),
+              position <= 0 ? "" : folders.get(position-1).getString("id"), trash.isChecked() ? !restore : null);
+          dialog.dismiss();
+          refresh();
+        } catch (Exception failed) { error(failed); }
+      }));
+      dialog.show();
+    } catch (Exception failed) { error(failed); }
   }
 
   private void removeFolder() {

@@ -54,7 +54,7 @@ jobs:
       - name: Prepare APK
         run: |
           mkdir -p android/downloads
-          cp android/app/build/outputs/apk/debug/app-debug.apk android/downloads/Atlas-0.4.1-android-preview.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk android/downloads/Atlas-0.4.2-android-preview.apk
           cd android/downloads
           sha256sum *.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4

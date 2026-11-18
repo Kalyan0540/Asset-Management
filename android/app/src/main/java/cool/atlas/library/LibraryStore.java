@@ -231,6 +231,24 @@ public final class LibraryStore implements AutoCloseable {
     }
   }
 
+  synchronized void organizeItems(List<JSONObject> selected, JSONArray tags, String folder, Boolean trashed) throws Exception {
+    if (!folder.isEmpty() && captureFolder(folder).length() == 0) throw new IOException("Folder is unavailable");
+    db.beginTransaction();
+    try {
+      for (JSONObject original : selected) {
+        JSONObject item = get(original.getString("id"));
+        int revision = original.getInt("revision");
+        if (item.getInt("revision") != revision) throw new IOException("An item changed. Select the items again.");
+        JSONArray targetTags = item.getJSONArray("tags"), memberships = item.getJSONArray("collections");
+        for (int i=0;i<tags.length();i++) addUnique(targetTags,tags.getString(i));
+        if (!folder.isEmpty()) addUnique(memberships,folder);
+        edit(item.getString("id"),revision,item.getString("title"),item.getString("description"),
+            item.optString("body"),targetTags,memberships,item.optBoolean("favorite"),trashed == null ? item.optBoolean("trashed") : trashed);
+      }
+      db.setTransactionSuccessful();
+    } finally { db.endTransaction(); }
+  }
+
   synchronized JSONObject previewRemoval(String key) throws Exception {
     List<JSONObject> folders = collections();
     LinkedHashSet<String> ids = new LinkedHashSet<>();

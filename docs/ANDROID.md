@@ -1,6 +1,6 @@
-# Atlas Android 0.4.1 preview
+# Atlas Android 0.4.2 preview
 
-Use Atlas offline on Android 8 or newer. The preview is available as an APK on GitHub. [Download Atlas for Android](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.4.1-preview)
+Use Atlas offline on Android 8 or newer. The preview is available as an APK on GitHub. [Download Atlas for Android](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.4.2-preview)
 
 ## Install or update
 
@@ -16,7 +16,7 @@ Once the browser or source app's bytes have been copied into Atlas's private cap
 
 ## Browse, edit, and export
 
-- Switch between Grid and List. Search titles, notes and tags. Sort results or filter by actual file type, use built-in views, and browse nested folders.
+- Switch between Grid and List. Search titles, notes and tags. Sort results or filter by actual file type, use built-in views, and browse nested folders. Long-press an item to select multiple files, tag them, place them in a folder, or move them to Trash.
 - Create simple Smart Folders for names, tags, and file types. Backups can carry saved desktop rules as well.
 - Edit notes and details with autosave and draft recovery. Notes can link to library items and display embedded images. The **Connections** view shows a small interactive graph and a list of related items and backlinks. **Revision history** can restore a previous version.
 - Edit tags, folder memberships, ratings, descriptions and source links. Folder deletion has a preview and an Undo action. Export an original or Markdown file to a location you choose.
