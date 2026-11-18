@@ -55,10 +55,10 @@ F053,Sync,Selective sync and offline pinning,R1,M3,F051,Metadata visible without
 F054,History,Change sets named checkpoints and restore,R1,M3,F032;F050,Restore is a new revision and checkpoint reports blob availability,Proposed,Planned
 F055,Recovery,Consistent backup and clean-device restore,R1,M3,F054;F048,Originals relations schemas pending edits and outbox survive restoration,Proposed,Desktop 0.2 partial - see IMPLEMENTATION_STATUS.md
 F056,Recovery,Retention tombstones and garbage collection,R1,M3,F055;F050,Retained versions are not collected and stale devices cannot resurrect deletes,Proposed,Planned
-F057,Android,Offline library navigation and local search,R1,M3,F003;F033;F053,Cached items load without network and unsupported originals are explicit,P02,Planned
-F058,Android,Share sheet durable capture and imports,R1,M3,F003;F012;F051,Accepted shared bytes survive app death and sync without duplicates,P01;P03,Planned
-F059,Android,Touch media preview tags and collections,R1,M3,F057;F022;F024;F019,Core organization works without hover and with touch-size controls,Proposed,Planned
-F060,Android,Offline notes table forms and local graph,R1,M3,F057;F035;F046;F043,Changes persist offline and resolve correctly after reconnect,Proposed,Planned
+F057,Android,Offline library navigation and local search,R1,M3,F003;F033;F053,Cached items load without network and unsupported originals are explicit,P02,0.3 Android preview partial - see ANDROID.md
+F058,Android,Share sheet durable capture and imports,R1,M3,F003;F012;F051,Accepted shared bytes survive app death and sync without duplicates,P01;P03,0.3 Android preview partial - see ANDROID.md
+F059,Android,Touch media preview tags and collections,R1,M3,F057;F022;F024;F019,Core organization works without hover and with touch-size controls,Proposed,0.3 Android preview partial - see ANDROID.md
+F060,Android,Offline notes table forms and local graph,R1,M3,F057;F035;F046;F043,Changes persist offline and resolve correctly after reconnect,Proposed,0.3 Android preview partial - see ANDROID.md
 F061,Android,Native background transfer scheduler,R1,M3,F051;F058,Wi-Fi constraints retry and process death preserve queued work,P02,Planned
 F062,Android,Storage budget and cache controls,R1,M3,F053;F061,Eviction preserves pinned originals unsent captures and custom thumbnails,Proposed,Planned
 F063,Chrome,MV3 native bridge and persistent capture queue,R1,M3,F011,Worker termination or desktop outage leaves captures retryable,P04;P05,Planned
@@ -79,7 +79,7 @@ F077,Agents,Scoped identities permissions and audit,R1,M4,F007;F011;F054,Expired
 F078,Agents,Built-in MCP query and mutation tools,R1,M4,F077;F068,Two actual clients complete read and scoped reversible write workflows,A01;A02,Prototype partial - see IMPLEMENTATION_STATUS.md
 F079,Agents,HTTP API CLI and machine-readable schemas,R1,M4,F077;F078,UI-equivalent changes use expected revisions and idempotency keys,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
 F080,Agents,Headless desktop service lifecycle,R1,M4,F079,Agent access works with window closed when service enabled and stops when disabled,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
-F081,Migration,One-way Eagle importer and migration report,R1,M5,F005;F048;F032,Mapped fields preserve IDs and counts; retry does not duplicate imported items,E11;E16;E17,Planned
+F081,Migration,One-way Eagle importer and migration report,R1,M5,F005;F048;F032,Mapped fields preserve IDs and counts; retry does not duplicate imported items,E11;E16;E17,0.3 migration partial - see EAGLE_IMPORT.md
 F082,Release,Signed Windows macOS and Android packages,R1,M5,F080;F060,Clean installation upgrade and rollback/recovery documented per platform,Proposed,Planned
 F083,Release,Accessibility and interaction verification,R1,M5,F031;F059;F060,Keyboard and Android screen-reader acceptance scenarios pass,Proposed,Prototype partial - see IMPLEMENTATION_STATUS.md
 F084,Release,Performance and memory benchmark suite,R1,M5,F030;F057;F072,Hardware dataset cold/warm results and peak memory recorded,Proposed,Planned
