@@ -36,6 +36,8 @@ export function NoteEditor({
   onBack,
   onOpen,
   busy,
+  rendered,
+  setRendered,
 }: {
   item: Item;
   items: Item[];
@@ -43,9 +45,10 @@ export function NoteEditor({
   onBack: () => void;
   onOpen: (id: string) => void;
   busy: boolean;
+  rendered: boolean;
+  setRendered: (rendered: boolean) => void;
 }) {
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const [rendered, setRendered] = useState(false);
   const [slash, setSlash] = useState<{ start: number; end: number; query: string } | null>(null);
   const [link, setLink] = useState<{ start: number; end: number } | null>(null);
   const [query, setQuery] = useState('');

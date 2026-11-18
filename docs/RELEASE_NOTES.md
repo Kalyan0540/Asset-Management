@@ -1,3 +1,11 @@
+# Atlas 0.4.1
+
+Choose a related item in the inspector and click **Save changes**. Atlas now saves the selected relation directly, and you can click the saved link to open its target. Saving a Markdown note keeps the current Write or Read view.
+
+The same library opens after updating. This desktop update keeps the current Eagle import behavior. The Android preview is unchanged.
+
+Download the DMG for your Mac chip or the 64-bit Windows installer under Assets. [Setup guide](https://github.com/Kalyan0540/Asset-Management/blob/v0.4.1/docs/GETTING_STARTED.md)
+
 # Atlas 0.4.0
 
 - Hover over an image or video to reveal its magnifying glass. Click to open Quick Preview. Switch between Grid, Justified and Waterfall using the gallery toolbar.

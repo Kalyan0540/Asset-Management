@@ -787,6 +787,11 @@ fieldset > small {
   font-weight: 500;
   color: #b8bec9;
 }
+.relation-link {
+  text-align: left;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
 .relation-add {
   display: flex;
   gap: 6px;

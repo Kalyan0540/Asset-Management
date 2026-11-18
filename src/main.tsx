@@ -285,6 +285,8 @@ function Inspector({
   onDirty,
   editorHost,
   onOpen,
+  noteReading,
+  onNoteReadingChange,
 }: {
   item: Item;
   items: Item[];
@@ -295,6 +297,8 @@ function Inspector({
   onDirty: (dirty: boolean) => void;
   editorHost: HTMLDivElement | null;
   onOpen: (id: string) => void;
+  noteReading: boolean;
+  onNoteReadingChange: (reading: boolean) => void;
 }) {
   const [draft, setDraft] = useState(item),
     [tags, setTags] = useState(item.tags.join(', ')),
@@ -302,7 +306,21 @@ function Inspector({
     [busy, setBusy] = useState(false),
     [target, setTarget] = useState(''),
     [label, setLabel] = useState('related to');
-  const dirty = JSON.stringify(draft) !== JSON.stringify(item) || tags !== item.tags.join(', ');
+  const pendingRelation = items.some((candidate) => candidate.id === target && !candidate.trashed)
+    ? { target, label: label.trim() || 'related to' }
+    : null;
+  const relations =
+    pendingRelation &&
+    !draft.relations.some(
+      (relation) =>
+        relation.target === pendingRelation.target && relation.label === pendingRelation.label,
+    )
+      ? [...draft.relations, pendingRelation]
+      : draft.relations;
+  const dirty =
+    JSON.stringify(draft) !== JSON.stringify(item) ||
+    tags !== item.tags.join(', ') ||
+    relations !== draft.relations;
   useEffect(() => {
     onDirty(dirty);
     return () => onDirty(false);
@@ -327,7 +345,7 @@ function Inspector({
           .map((t) => t.trim())
           .filter(Boolean),
         collections: draft.collections,
-        relations: draft.relations,
+        relations,
         ...(item.kind === 'note' ? { body: draft.body } : {}),
         favorite: draft.favorite,
       });
@@ -412,28 +430,44 @@ function Inspector({
         </fieldset>
         <fieldset>
           <legend>Relations</legend>
-          {draft.relations.map((r, n) => (
-            <div className="relation" key={n}>
-              <Link2 size={13} />
-              <span>
-                {r.label}{' '}
-                <strong>{items.find((i) => i.id === r.target)?.title ?? 'Unavailable item'}</strong>
-              </span>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label={`Remove relation ${n + 1}`}
-                onClick={() =>
-                  field(
-                    'relations',
-                    draft.relations.filter((_, i) => i !== n),
-                  )
-                }
-              >
-                <X size={13} />
-              </button>
-            </div>
-          ))}
+          {draft.relations.map((r, n) => {
+            const linked = items.find(
+              (candidate) => candidate.id === r.target && !candidate.trashed,
+            );
+            return (
+              <div className="relation" key={n}>
+                <Link2 size={13} />
+                <span>
+                  {r.label}{' '}
+                  {linked ? (
+                    <button
+                      type="button"
+                      className="text-button relation-link"
+                      aria-label={`Open linked item: ${linked.title}`}
+                      onClick={() => onOpen(linked.id)}
+                    >
+                      {linked.title}
+                    </button>
+                  ) : (
+                    <strong>Unavailable item</strong>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={`Remove relation ${n + 1}`}
+                  onClick={() =>
+                    field(
+                      'relations',
+                      draft.relations.filter((_, i) => i !== n),
+                    )
+                  }
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            );
+          })}
           <input
             aria-label="Relation label"
             value={label}
@@ -459,15 +493,16 @@ function Inspector({
               type="button"
               className="icon-button bordered"
               aria-label="Add relation"
-              disabled={!target || !label.trim()}
+              disabled={!pendingRelation}
               onClick={() => {
-                field('relations', [...draft.relations, { target, label: label.trim() }]);
+                field('relations', relations);
                 setTarget('');
               }}
             >
               <Plus size={16} />
             </button>
           </div>
+          {pendingRelation && <small>Save changes to link the selected item.</small>}
         </fieldset>
         <label className="check-label">
           <input
@@ -539,6 +574,8 @@ function Inspector({
             onBack={onClose}
             onOpen={onOpen}
             busy={busy}
+            rendered={noteReading}
+            setRendered={onNoteReadingChange}
           />,
           editorHost,
         )}
@@ -561,6 +598,7 @@ function App() {
     [menu, setMenu] = useState(false);
   const [editorHost, setEditorHost] = useState<HTMLDivElement | null>(null);
   const [noteDetails, setNoteDetails] = useState(false);
+  const [readingNoteId, setReadingNoteId] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState<Record<string, Dimensions>>({});
   const [dirty, setDirty] = useState(false);
   const [showAI, setShowAI] = useState(false);
@@ -1324,6 +1362,8 @@ function App() {
           onDirty={setDirty}
           editorHost={editorHost}
           onOpen={select}
+          noteReading={item.id === readingNoteId}
+          onNoteReadingChange={(reading) => setReadingNoteId(reading ? item.id : null)}
         />
       )}
       {notice && (

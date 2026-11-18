@@ -162,9 +162,45 @@ test('image quick preview, colors, gallery layouts and linked note editing', asy
   await page.getByLabel('Embed images').check();
   await page.getByRole('button', { name: new RegExp(filename) }).click();
   await expect(editor).toHaveValue(/## Palette\n\n!\[Canvas.*\]\(atlas:/);
-  await page.getByRole('button', { name: 'Save note', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Changes saved');
   await page.getByRole('button', { name: 'Read', exact: true }).click();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await expect(page.getByRole('button', { name: 'Read', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByRole('heading', { name: 'Palette' })).toBeVisible();
   await expect(page.getByRole('img', { name: filename })).toBeVisible();
+});
+
+test('saving with a selected related item keeps the link and lets you open it', async ({
+  page,
+}) => {
+  const suffix = Date.now();
+  const title = `Linked note ${suffix}`;
+  const filename = `Linked asset ${suffix}.txt`;
+  await page.goto('/');
+  await page.getByRole('button', { name: 'New note', exact: true }).click();
+  await page.getByLabel('Note title').fill(title);
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Changes saved');
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await page
+    .getByRole('navigation', { name: 'Library navigation' })
+    .getByRole('button', { name: /^All items/ })
+    .click();
+  await page.getByLabel('Import files', { exact: true }).setInputFiles({
+    name: filename,
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Linked original'),
+  });
+  await expect(page.getByLabel('Item title')).toHaveValue(filename);
+  await page.getByLabel('Related item').selectOption({ label: title });
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByLabel('Related item')).toHaveValue('');
+  await page.reload();
+  await page.getByLabel('Search library').fill(filename);
+  await page.locator('.asset-open').filter({ hasText: filename }).click();
+  await page.getByRole('button', { name: `Open linked item: ${title}` }).click();
+  await expect(page.getByLabel('Note title')).toHaveValue(title);
 });
