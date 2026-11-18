@@ -14,7 +14,11 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Save to Atlas"
+    "default_title": "Save to Atlas",
+    "default_icon": "icon.png"
   },
-  "options_page": "preferences.html"
+  "options_page": "preferences.html",
+  "icons": {
+    "128": "icon.png"
+  }
 }
