@@ -72,6 +72,10 @@ npm run test:e2e
 
 If Chromium is already installed, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its executable instead of downloading a browser. Browser tests use a separate `.test-library/` directory, leaving your default library alone. GitHub Actions is configured to run build, integration and browser checks.
 
+## Next-release work
+
+The `feat/eagle-import-android` branch adds [Eagle library import](docs/EAGLE_IMPORT.md) and starts the Android application. Features on this branch are not included in the existing 0.2.1 downloads until a newer release is published.
+
 ## Project documents
 
 - [Getting started](docs/GETTING_STARTED.md): simple download, install, first-use, backup and AI instructions.

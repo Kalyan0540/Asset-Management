@@ -22,23 +22,8 @@ import { patchSchema } from '../shared/model.ts';
 import { LocalAI } from './ai.ts';
 
 const MAX_JSON = 2_000_000;
-const previewTypes: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.avif': 'image/avif',
-  '.mp4': 'video/mp4',
-  '.webm': 'video/webm',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-  '.pdf': 'application/pdf',
-  '.md': 'text/plain',
-  '.txt': 'text/plain',
-  '.csv': 'text/plain',
-};
+import { previewTypes } from './media.ts';
+
 const json = (res: ServerResponse, status: number, data: unknown) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(data));

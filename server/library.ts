@@ -135,6 +135,11 @@ export class Library {
       this.save({ ...this.base(data.filename), ...data, kind: 'asset' }, 'import', actor),
     );
   }
+  importEagleItem(data: Omit<Item, 'id' | 'revision'>) {
+    return this.transaction(() =>
+      this.save({ ...data, id: randomUUID(), revision: 1 }, 'import Eagle', 'eagle-import'),
+    );
+  }
   patch(id: string, input: ItemPatch, actor = 'ui') {
     return this.transaction(() => this.update(id, input, actor));
   }

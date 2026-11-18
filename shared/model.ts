@@ -41,6 +41,7 @@ export type Item = {
   mime: string;
   size: number;
   hash: string | null;
+  source?: { provider: 'eagle'; id: string; metadata: Record<string, unknown> };
 };
 export type Collection = { id: string; name: string };
 export type LibrarySnapshot = { items: Item[]; collections: Collection[] };

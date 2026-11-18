@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { once } from 'node:events';
 import { createLibraryServer } from '../server/http.ts';
 import { createBackup, restoreBackup } from '../server/backup.ts';
+import { importEagleLibrary } from '../server/eagle.ts';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -12,6 +13,7 @@ let service: ReturnType<typeof createLibraryServer> | undefined;
 let root = '';
 let origin = '';
 let busy = false;
+let eagleImport: AbortController | undefined;
 const smoke = process.argv.includes('--smoke-test');
 app.setName('Atlas');
 if (process.env.ATLAS_USER_DATA) app.setPath('userData', process.env.ATLAS_USER_DATA);
@@ -80,7 +82,7 @@ async function chooseLibrary(create: boolean) {
     : chosen.filePaths[0];
   if (!create && !existsSync(join(path, 'catalog.sqlite')))
     throw new Error(
-      'Choose an Atlas library folder containing catalog.sqlite. Eagle libraries need an importer, which is not available in this release.',
+      'Choose an Atlas library folder containing catalog.sqlite. For Eagle libraries, choose Library → Import Eagle Library instead.',
     );
   await openLibrary(path);
 }
@@ -103,6 +105,73 @@ function menu() {
         { label: 'New Library…', click: () => void operation(() => chooseLibrary(true)) },
         { label: 'Open Library…', click: () => void operation(() => chooseLibrary(false)) },
         { label: 'Show Library Folder', click: () => void shell.openPath(root) },
+        {
+          label: 'Import Eagle Library…',
+          click: () =>
+            void operation(async () => {
+              if (!(await confirmSwitch())) return;
+              const choice = await dialog.showMessageBox(window!, {
+                type: 'info',
+                buttons: ['Cancel', 'Choose Eagle Library'],
+                defaultId: 1,
+                cancelId: 0,
+                message: 'Close Eagle before importing its library.',
+                detail:
+                  'Atlas copies originals into a new library. Your Eagle library stays unchanged. Folder paths, tags and annotations are retained; a report lists skipped files and unsupported features. You need enough free space for a separate copy.',
+              });
+              if (choice.response !== 1) return;
+              const source = await dialog.showOpenDialog(window!, {
+                title: 'Choose your Eagle .library folder',
+                properties: ['openDirectory', 'treatPackageAsDirectory'],
+              });
+              if (source.canceled) return;
+              const target = await dialog.showOpenDialog(window!, {
+                title: 'Choose where to create the imported Atlas library',
+                properties: ['openDirectory', 'createDirectory'],
+              });
+              if (target.canceled) return;
+              eagleImport = new AbortController();
+              menu();
+              try {
+                window!.setProgressBar(2);
+                const result = await importEagleLibrary(
+                  source.filePaths[0],
+                  join(target.filePaths[0], `Imported Eagle ${Date.now()}`),
+                  {
+                    signal: eagleImport.signal,
+                    onProgress: (done, total) => {
+                      window?.setProgressBar(total ? done / total : 0);
+                      window?.setTitle(`Atlas — Importing Eagle ${done}/${total}`);
+                    },
+                  },
+                );
+                await openLibrary(result.path);
+                const answer = await dialog.showMessageBox(window!, {
+                  type: result.report.skipped ? 'warning' : 'info',
+                  buttons: ['Done', 'Open Import Report'],
+                  message: `${result.report.imported} items imported; ${result.report.skipped} skipped.`,
+                  detail:
+                    'Your new Atlas library is open. Read the report for metadata mappings and any missing or unsupported files. Eagle has not been changed.',
+                });
+                if (answer.response === 1)
+                  await shell.openPath(join(result.path, 'eagle-import-report.json'));
+              } catch (error) {
+                if (eagleImport.signal.aborted)
+                  await dialog.showMessageBox(window!, {
+                    message:
+                      'Import cancelled. Your current library and Eagle source were not changed.',
+                  });
+                else throw error;
+              } finally {
+                eagleImport = undefined;
+                window?.setProgressBar(-1);
+                window?.setTitle('Atlas');
+                menu();
+              }
+            }),
+        },
+        { label: 'Cancel Eagle Import', enabled: !!eagleImport, click: () => eagleImport?.abort() },
+
         { type: 'separator' },
         {
           label: 'Back Up Library…',
@@ -210,7 +279,7 @@ function menu() {
               type: 'info',
               message: `Atlas ${app.getVersion()} — early desktop release`,
               detail:
-                'Files, notes, tags, collections, relations, history and backups work locally. Android, device sync, Eagle migration and the Chrome extension are still in development. Your files are not uploaded automatically.',
+                'Files, notes, tags, collections, relations, history and backups work locally. Device sync and the Chrome extension are still in development. Eagle import is available from the Library menu. Your files are not uploaded automatically.',
             }),
         },
       ],
