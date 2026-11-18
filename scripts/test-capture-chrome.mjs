@@ -57,6 +57,7 @@ try {
   });
   const options = await browser.newPage();
   await options.goto(captureExtensionOrigin + '/preferences.html');
+  await expect(options.getByRole('status')).toHaveText('Ready to pair');
   await options.getByLabel('Pairing key').fill(pairing);
   await options.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(options.getByRole('status')).toHaveText('Connected to Capture test library');

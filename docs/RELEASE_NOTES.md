@@ -1,3 +1,10 @@
+# Atlas 0.9.1
+
+- Preserve graph filters and scroll position when switching workspace tabs.
+- The Chrome pairing controls wait for the extension to finish loading before accepting a pairing key.
+
+[Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.9.1/docs/GETTING_STARTED.md) · [Android setup](https://github.com/Kalyan0540/Asset-Management/blob/feat/library-foundation/docs/ANDROID.md)
+
 # Atlas 0.9.0
 
 - Write with live Markdown headings and inline Atlas images. Use the caret-positioned slash menu and searchable item picker to link, embed or connect multiple items.

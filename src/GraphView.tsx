@@ -5,7 +5,18 @@ import type { Item } from '../shared/model';
 import { noteReferences } from './NoteEditor';
 
 type Point = { x: number; y: number };
-const graphMemory = new Map<string, { zoom: number; pan: Point; positions: Map<string, Point> }>();
+type GraphFilters = {
+  focus: string;
+  tag: string;
+  relationship: string;
+  onlyAssets: boolean;
+  orphans: boolean;
+  attachments: boolean;
+};
+const graphMemory = new Map<
+  string,
+  { zoom: number; pan: Point; positions: Map<string, Point>; filters: GraphFilters }
+>();
 
 export function GraphView({
   items,
@@ -26,16 +37,25 @@ export function GraphView({
   const graph = useRef<Core>(null);
   const select = useRef(onSelect);
   select.current = onSelect;
-  const [focus, setFocus] = useState(initialFocus);
-  const [current, setCurrent] = useState('');
-  const [tag, setTag] = useState('');
-  const [relationship, setRelationship] = useState('');
-  const [onlyAssets, setOnlyAssets] = useState(false);
-  const [query, setQuery] = useState('');
-  const [orphans, setOrphans] = useState(true);
-  const [attachments, setAttachments] = useState(true);
-  const mounted = useRef(false);
   const camera = useRef(graphMemory.get(workspaceKey));
+  const [focus, setFocus] = useState(camera.current?.filters.focus ?? initialFocus);
+  const [current, setCurrent] = useState('');
+  const [tag, setTag] = useState(camera.current?.filters.tag ?? '');
+  const [relationship, setRelationship] = useState(camera.current?.filters.relationship ?? '');
+  const [onlyAssets, setOnlyAssets] = useState(camera.current?.filters.onlyAssets ?? false);
+  const [query, setQuery] = useState('');
+  const [orphans, setOrphans] = useState(camera.current?.filters.orphans ?? true);
+  const [attachments, setAttachments] = useState(camera.current?.filters.attachments ?? true);
+  const mounted = useRef(false);
+  const filters = useRef<GraphFilters>({
+    focus,
+    tag,
+    relationship,
+    onlyAssets,
+    orphans,
+    attachments,
+  });
+  filters.current = { focus, tag, relationship, onlyAssets, orphans, attachments };
   const positions = useRef(camera.current?.positions ?? new Map<string, Point>());
   const lastFocus = useRef(focus);
   const itemMap = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);

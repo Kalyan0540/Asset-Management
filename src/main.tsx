@@ -1286,7 +1286,7 @@ function App() {
       readingNoteId,
       rules,
       sort,
-      scroll: document.querySelector('.gallery-workspace')?.scrollTop ?? 0,
+      scroll: (item?.kind === 'note' ? editorHost : gallerySurface.current)?.scrollTop ?? 0,
       split,
     };
   }
@@ -1308,8 +1308,13 @@ function App() {
     setPreview(null);
     setNoteDetails(false);
     requestAnimationFrame(() => {
-      const gallery = document.querySelector('.gallery-workspace');
-      if (gallery) gallery.scrollTop = state?.scroll ?? 0;
+      const view = document.querySelector<HTMLElement>(
+        state?.selected &&
+          library.items.some((entry) => entry.id === state.selected && entry.kind === 'note')
+          ? '.note-host'
+          : '.library-content',
+      );
+      if (view) view.scrollTop = state?.scroll ?? 0;
     });
   }
   function switchTab(tab: WorkspaceTab) {

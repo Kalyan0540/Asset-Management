@@ -3,6 +3,9 @@ import { applyTheme, preferences, send } from './settings.js';
 const saved = await preferences();
 const status = document.querySelector('#pair-status');
 const key = document.querySelector('#key');
+const connect = document.querySelector('#connect');
+const disconnect = document.querySelector('#disconnect');
+let statusRequest = 0;
 function message(text, error = false) {
   status.textContent = text;
   status.dataset.error = String(error);
@@ -17,15 +20,9 @@ for (const field of ['theme', 'tags', 'drag', 'doubleClick']) {
   });
 }
 applyTheme(saved.theme);
-if (saved.key)
-  void send('status').then(
-    ({ library }) => message(`Connected to ${library}`),
-    (error) => message(error.message, true),
-  );
-else message('Ready to pair');
-
 document.querySelector('#pair').addEventListener('submit', async (event) => {
   event.preventDefault();
+  statusRequest++;
   const value = key.value.trim().toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(value)) {
     message('Paste the full pairing key from Atlas.', true);
@@ -48,8 +45,22 @@ document.querySelector('#pair').addEventListener('submit', async (event) => {
     });
   }
 });
-document.querySelector('#disconnect').addEventListener('click', async () => {
+disconnect.addEventListener('click', async () => {
+  statusRequest++;
   await chrome.storage.local.remove('key');
   key.value = '';
   message('Disconnected');
 });
+
+if (saved.key) {
+  const request = ++statusRequest;
+  void send('status').then(
+    ({ library }) => {
+      if (request === statusRequest) message(`Connected to ${library}`);
+    },
+    (error) => {
+      if (request === statusRequest) message(error.message, true);
+    },
+  );
+} else message('Ready to pair');
+connect.disabled = disconnect.disabled = false;
