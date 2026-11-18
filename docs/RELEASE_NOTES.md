@@ -1,9 +1,9 @@
-# Atlas 0.9.1
+# Atlas 0.9.2
 
 - Preserve graph filters and scroll position when switching workspace tabs.
 - The Chrome pairing controls wait for the extension to finish loading before accepting a pairing key.
 
-[Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.9.1/docs/GETTING_STARTED.md) · [Android setup](https://github.com/Kalyan0540/Asset-Management/blob/feat/library-foundation/docs/ANDROID.md)
+[Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.9.2/docs/GETTING_STARTED.md) · [Android setup](https://github.com/Kalyan0540/Asset-Management/blob/feat/library-foundation/docs/ANDROID.md)
 
 # Atlas 0.9.0
 

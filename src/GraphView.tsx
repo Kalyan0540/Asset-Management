@@ -190,7 +190,12 @@ export function GraphView({
       instance.nodes().forEach((node) => {
         positions.current.set(node.id(), node.position());
       });
-      const saved = { zoom: instance.zoom(), pan: instance.pan(), positions: positions.current };
+      const saved = {
+        zoom: instance.zoom(),
+        pan: instance.pan(),
+        positions: positions.current,
+        filters: filters.current,
+      };
       graphMemory.set(workspaceKey, saved);
       if (graphMemory.size > 16) graphMemory.delete(graphMemory.keys().next().value!);
       instance.destroy();
