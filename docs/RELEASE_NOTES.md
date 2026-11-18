@@ -1,4 +1,14 @@
-# Atlas 0.6.0
+# Atlas 0.7.0
+
+- Atlas saves note and inspector edits automatically and recovers pending desktop drafts. If two editors change the same field, you can choose which version to keep.
+- Parent folders show their subfolders first. Search has a file-type checklist. Grid and List use directional navigation, contextual actions, and range and drag selection.
+- Images open in the center with both panels available. Use `Ctrl+/` to hide or restore the panels. Markdown peeks render text, and supported videos get thumbnails.
+- The graph has a library-wide view, a local view for an item's neighbors, search, and connection highlighting.
+- This release also includes the library merge, tag tools, and reverse image search developed for 0.6.0.
+
+Choose the installer for your computer under **Assets**. [Desktop setup](https://github.com/Kalyan0540/Asset-Management/blob/v0.7.0/docs/GETTING_STARTED.md) · [Android preview](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.3.0-preview)
+
+## Atlas 0.6.0 development milestone
 
 - Choose **Library → Merge Libraries…** to combine two Atlas libraries into a separate copy. The merged library keeps nested folders, original files, item history, note links and relations. Open either source library again from its existing location.
 - In **All Tags**, click the pencil next to a tag to review a rename or merge. Tag groups can also be renamed, combined or removed.

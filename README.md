@@ -6,14 +6,9 @@ The desktop app imports Eagle libraries and includes tags, folders, previews, a 
 
 ## Downloads
 
-| Device | Installer |
-|---|---|
-| Mac with Apple chip (M1 or newer) | [Atlas 0.6.0 for Apple chip](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.6.0/Atlas-0.6.0-mac-arm64.dmg) |
-| Mac with Intel processor | [Atlas 0.6.0 for Intel Mac](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.6.0/Atlas-0.6.0-mac-x64.dmg) |
-| Windows with Intel or AMD processor | [Atlas 0.6.0 for Windows](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.6.0/Atlas-0.6.0-win-x64.exe) |
-| Android 8.0 or newer | [Atlas Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) |
+Open [GitHub Releases](https://github.com/Kalyan0540/Asset-Management/releases) and choose the newest published desktop release. Under **Assets**, pick `mac-arm64.dmg` for an Apple-chip Mac, `mac-x64.dmg` for an Intel Mac, or `win-x64.exe` for 64-bit Windows. [Desktop setup](docs/GETTING_STARTED.md)
 
-See the [desktop installation guide](docs/GETTING_STARTED.md), the [Android setup guide](docs/ANDROID.md), or [all GitHub releases](https://github.com/Kalyan0540/Asset-Management/releases).
+[Download the Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) · [Android setup](docs/ANDROID.md)
 
 The native **Library** menu opens libraries, shows their location, makes verified backups, and combines two Atlas libraries into a separate copy. The desktop gallery has a **Search web by image** action, and **All Tags** offers a preview before renaming or merging tags. Your data stays outside the installed application when you update.
 
@@ -87,17 +82,7 @@ Use desktop 0.3.0 or later for [Eagle library import](docs/EAGLE_IMPORT.md). The
 
 ## Project documents
 
-- [Getting started](docs/GETTING_STARTED.md): simple download, install, first-use, backup and AI instructions.
-- [Release notes](docs/RELEASE_NOTES.md): new capabilities and download information by version.
-
-- [Implementation status](docs/IMPLEMENTATION_STATUS.md): working capabilities, measured checks, limitations and next gates.
-- [Local API](docs/API.md): endpoints, storage layout, error semantics and agent boundaries.
-- [Architecture decision 001](docs/ADR-001-REFERENCE-PROTOTYPE.md): why this executable baseline does not close the fork/production-stack decision.
-- [Project plan](docs/PROJECT_PLAN.md): full Windows/macOS/Android scope, architecture options, AI, sync and milestones.
-- [Eagle research](docs/RESEARCH.md): feature baseline, evidence limits and primary sources.
-- [Open-source options](docs/OPEN_SOURCE_OPTIONS.md): candidate applications, components, licenses and adoption tests.
-- [Feature backlog](docs/FEATURE_BACKLOG.csv): staged requirements and acceptance criteria.
-- [Cloud workspace and GitHub guide](docs/WORKSPACE_GUIDE.md): where files live and how commits/pushes work.
+See the [documentation index](docs/README.md) for user guides, research, planning, and engineering notes.
 
 The implementation branch is `feat/library-foundation`. The task workspace is `/workspace/Asset-Management`; that path is on the cloud machine, not your laptop. GitHub is the versioned source location after push. Neither GitHub nor the Codex workspace is the future personal-library sync service.
 

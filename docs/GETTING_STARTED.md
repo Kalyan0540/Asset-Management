@@ -10,9 +10,9 @@ Open [Atlas downloads](https://github.com/Kalyan0540/Asset-Management/releases) 
 
 | Your computer | File to choose |
 |---|---|
-| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.6.0-mac-arm64.dmg` |
-| Mac with an Intel processor | `Atlas-0.6.0-mac-x64.dmg` |
-| Windows computer with an Intel/AMD processor | `Atlas-0.6.0-win-x64.exe` |
+| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-<version>-mac-arm64.dmg` |
+| Mac with an Intel processor | `Atlas-<version>-mac-x64.dmg` |
+| Windows computer with an Intel/AMD processor | `Atlas-<version>-win-x64.exe` |
 
 To check your Mac, click the **Apple menu → About This Mac**. “Chip: Apple …” means use the Apple chip download. “Processor: Intel …” means use the Intel download.
 
@@ -29,14 +29,14 @@ These early downloads are not yet signed with a verified publisher certificate o
 ## 3. Try a small collection
 
 1. Click **Import files**, or drag a few images, videos or documents into the window. Atlas copies the files; the originals stay where they were.
-2. Click an item. Add a title, description or tags in the right panel, then click **Save changes**.
+2. Click an item. Edit the title, description, or tags in the right panel. Atlas saves edits automatically in 0.7 and newer.
 3. Use **+** next to Collections to make a folder-like collection. An item can belong to more than one collection without duplicating its file.
-4. Click **New note** to open a new note in the center. Type `/` at the start of a line for headings, lists and other commands. Use **Link an item** to link a note or embed an image, **Read** to see the formatted result, and **Save note** to keep it. Saved links appear in Graph when both items are in the current view.
+4. Click **New note** to open a new note in the center. Type `/` at the start of a line for headings, lists and other commands. Use **Link an item** to link a note or embed an image, **Read** to see the formatted result, and let Atlas autosave the note. Saved links appear in Graph when both items are in the current view.
 5. Hover over an asset and click its magnifying glass to open Quick Preview. On a touch screen, the button is visible on the card. Choose Grid, Justified or Waterfall from the view controls. Select an image to copy colors from the inspector.
 6. Use the checkboxes on cards to select several items and tag, collect, favorite or trash them together. A stale item causes the whole batch to stop rather than partially overwrite changes.
 7. Double-click an item, or select it and press **Space**, for a larger preview. Use the arrow keys to browse; press Escape to close it.
 
-Your library is saved automatically on this computer as you import files or click Save. You do not need to “push to GitHub” to keep using the app. GitHub holds the application's code and downloads, not your personal library.
+Your library is saved automatically on this computer as you import files and make edits. You do not need to “push to GitHub” to keep using the app. GitHub holds the application's code and downloads, not your personal library.
 
 ## Use the compact workspace
 
