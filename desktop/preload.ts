@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('atlasDesktop', {
     ipcRenderer.on('atlas:capture-saved', notify);
     return () => ipcRenderer.removeListener('atlas:capture-saved', notify);
   },
+  onWorkspaceCommand: (listener: (command: string) => void) => {
+    const notify = (_event: Electron.IpcRendererEvent, command: string) => listener(command);
+    ipcRenderer.on('atlas:workspace-command', notify);
+    return () => ipcRenderer.removeListener('atlas:workspace-command', notify);
+  },
   readDrafts: () => ipcRenderer.invoke('atlas:read-drafts'),
   writeDrafts: (drafts: unknown) => ipcRenderer.invoke('atlas:write-drafts', drafts),
   setAppearance: (value: string) => ipcRenderer.invoke('atlas:set-appearance', value),

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Sparkles, X, RefreshCw, Check, LoaderCircle } from 'lucide-react';
-import type { Item } from '../shared/model';
-import type { AiJob } from '../server/ai';
+import type { Collection, Item } from '../shared/model';
+import type { AiJob, WritingMode } from '../server/ai';
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch('/api/ai' + path, {
     method: body === undefined ? 'GET' : 'POST',
@@ -14,10 +14,16 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 }
 export function AiPanel({
   item,
+  selected,
+  catalog,
+  collections,
   onClose,
   onApplied,
 }: {
   item: Item | undefined;
+  selected: Item[];
+  catalog: Item[];
+  collections: Collection[];
   onClose: () => void;
   onApplied: () => Promise<void>;
 }) {
@@ -26,7 +32,14 @@ export function AiPanel({
     [available, setAvailable] = useState<boolean | null>(null),
     [jobs, setJobs] = useState<AiJob[]>([]),
     [error, setError] = useState(''),
-    [description, setDescription] = useState(false);
+    [description, setDescription] = useState(false),
+    [folders, setFolders] = useState(false),
+    [connections, setConnections] = useState(false),
+    [autoFile, setAutoFile] = useState(false),
+    [writing, setWriting] = useState<WritingMode>('summarize');
+  const reported = useRef(new Set<string>());
+  const onCatalogChange = useRef(onApplied);
+  onCatalogChange.current = onApplied;
   const refresh = async () => {
     try {
       const value = await request<{ available: boolean; models: string[] }>('/models');
@@ -45,7 +58,16 @@ export function AiPanel({
     const poll = async () => {
       try {
         const values = await request<AiJob[]>('/jobs');
-        if (active) setJobs(values);
+        if (active) {
+          setJobs(values);
+          const applied = values.filter(
+            (job) => job.autoFile && job.status === 'applied' && !reported.current.has(job.id),
+          );
+          if (applied.length) {
+            for (const job of applied) reported.current.add(job.id);
+            await onCatalogChange.current();
+          }
+        }
       } catch (e) {
         if (active) setError((e as Error).message);
       }
@@ -66,7 +88,13 @@ export function AiPanel({
       setError((e as Error).message);
     }
   };
-  const own = jobs.filter((j) => j.itemId === item?.id);
+  const own = jobs.filter((job) =>
+    selected.length
+      ? selected.some((entry) => entry.id === job.itemId)
+      : item
+        ? job.itemId === item.id
+        : true,
+  );
   return (
     <div className="ai-panel" role="dialog" aria-modal="true" aria-labelledby="ai-title">
       <header>
@@ -76,10 +104,7 @@ export function AiPanel({
           <X size={18} />
         </button>
       </header>
-      <p>
-        Suggest tags and descriptions with a model running on this computer. Nothing is sent to a
-        hosted AI service.
-      </p>
+      <p>Write, tag, and organize with a model running on this computer.</p>
       {available === null ? (
         <p>Checking your local model service…</p>
       ) : !available ? (
@@ -126,15 +151,66 @@ export function AiPanel({
       )}
       <section className="ai-target">
         <span>SELECTED ITEM</span>
-        <strong>{item?.title ?? 'Select an image or note first'}</strong>
+        <strong>
+          {selected.length
+            ? `${selected.length} selected items`
+            : (item?.title ?? 'Select an image or note first')}
+        </strong>
         <button
           className="primary full"
-          disabled={!item || !model || !available || own.some((j) => j.status === 'running')}
-          onClick={() => void perform(() => request('/jobs', { itemId: item!.id, model }))}
+          disabled={
+            (!item && !selected.length) ||
+            !model ||
+            !available ||
+            own.some((job) => job.status === 'running' || job.status === 'queued')
+          }
+          onClick={() =>
+            void perform(() =>
+              selected.length
+                ? request('/batch', { items: selected.map((entry) => entry.id), model, autoFile })
+                : request('/jobs', { itemId: item!.id, model }),
+            )
+          }
         >
           <Sparkles size={15} />
-          Suggest tags & description
+          Suggest tags, folders & description
         </button>
+        {selected.length > 0 && (
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={autoFile}
+              onChange={(event) => setAutoFile(event.target.checked)}
+            />
+            Automatically add suggested tags and existing folders for this batch
+          </label>
+        )}
+        {item?.kind === 'note' && !selected.length && (
+          <>
+            <label>
+              Writing action
+              <select
+                aria-label="Writing action"
+                value={writing}
+                onChange={(event) => setWriting(event.target.value as WritingMode)}
+              >
+                <option value="outline">Outline</option>
+                <option value="continue">Continue writing</option>
+                <option value="rewrite">Rewrite</option>
+                <option value="summarize">Summarize</option>
+              </select>
+            </label>
+            <button
+              className="secondary"
+              disabled={!model || !available}
+              onClick={() =>
+                void perform(() => request('/jobs', { itemId: item.id, model, mode: writing }))
+              }
+            >
+              Generate draft
+            </button>
+          </>
+        )}
       </section>
       {error && (
         <p className="ai-error" role="alert">
@@ -143,23 +219,26 @@ export function AiPanel({
       )}
       {own.map((job) => (
         <article className="ai-job" key={job.id}>
+          <p>{catalog.find((entry) => entry.id === job.itemId)?.title}</p>
           <div>
             <strong>
               {job.status === 'review'
                 ? 'Ready to review'
-                : job.status === 'running'
-                  ? 'Analyzing…'
-                  : job.status === 'applied'
-                    ? 'Applied'
-                    : job.status === 'stale'
-                      ? 'Item changed'
-                      : job.status === 'canceled'
-                        ? 'Canceled'
-                        : 'Could not finish'}
+                : job.status === 'queued'
+                  ? 'Queued'
+                  : job.status === 'running'
+                    ? 'Analyzing…'
+                    : job.status === 'applied'
+                      ? 'Applied'
+                      : job.status === 'stale'
+                        ? 'Item changed'
+                        : job.status === 'canceled'
+                          ? 'Canceled'
+                          : 'Could not finish'}
             </strong>
             <small>{job.model}</small>
           </div>
-          {job.status === 'running' && (
+          {(job.status === 'running' || job.status === 'queued') && (
             <button
               className="text-button"
               onClick={() => void perform(() => request(`/jobs/${job.id}/cancel`, {}))}
@@ -178,27 +257,79 @@ export function AiPanel({
             </div>
           )}
           {job.description && <p>{job.description}</p>}
+          {job.draft && <pre className="ai-draft">{job.draft}</pre>}
+          {!!job.folders?.length && (
+            <p>
+              Folders ·{' '}
+              {collections
+                .filter((folder) => job.folders?.includes(folder.id))
+                .map((folder) => folder.title ?? folder.name)
+                .join(', ')}
+            </p>
+          )}
+          {!!job.connections?.length && (
+            <p>
+              Connections ·{' '}
+              {catalog
+                .filter((entry) => job.connections?.includes(entry.id))
+                .map((entry) => entry.title)
+                .join(', ')}
+            </p>
+          )}
           {job.status === 'review' && (
             <>
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={description}
-                  onChange={(e) => setDescription(e.target.checked)}
-                />
-                Also replace the current description
-              </label>
+              {!job.draft && (
+                <>
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={description}
+                      onChange={(e) => setDescription(e.target.checked)}
+                    />
+                    Replace the current description
+                  </label>
+                  {!!job.folders?.length && (
+                    <label className="check-label">
+                      <input
+                        type="checkbox"
+                        checked={folders}
+                        onChange={(e) => setFolders(e.target.checked)}
+                      />
+                      Add to suggested folders
+                    </label>
+                  )}
+                  {!!job.connections?.length && (
+                    <label className="check-label">
+                      <input
+                        type="checkbox"
+                        checked={connections}
+                        onChange={(e) => setConnections(e.target.checked)}
+                      />
+                      Link suggested items
+                    </label>
+                  )}
+                </>
+              )}
               <button
                 className="primary full"
                 onClick={() =>
                   void perform(async () => {
-                    await request(`/jobs/${job.id}/apply`, { includeDescription: description });
+                    await request(`/jobs/${job.id}/apply`, {
+                      includeDescription: description,
+                      includeFolders: folders,
+                      includeConnections: connections,
+                      includeDraft: !!job.draft,
+                    });
                     await onApplied();
                   })
                 }
               >
                 <Check size={14} />
-                Apply suggestions
+                {job.draft
+                  ? job.mode === 'rewrite'
+                    ? 'Replace note with draft'
+                    : 'Append draft'
+                  : 'Apply suggestions'}
               </button>
             </>
           )}

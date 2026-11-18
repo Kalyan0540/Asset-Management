@@ -15,7 +15,7 @@ export default defineConfig({
     command: 'npm run start',
     url: 'http://127.0.0.1:3211',
     reuseExistingServer: false,
-    env: { PORT: '3211', ATLAS_LIBRARY: '.test-library' },
+    env: { PORT: '3211', ATLAS_LIBRARY: process.env.ATLAS_E2E_LIBRARY ?? '.test-library' },
     timeout: 30000,
   },
 });

@@ -5,6 +5,11 @@ async function newNote(page: Page) {
   await page.getByRole('button', { name: 'New note', exact: true }).click();
 }
 const saved = (page: Page) => expect(page.locator('.draft-status')).toHaveText('Changes saved');
+const storedNote = (page: Page, title: string) =>
+  expect.poll(async () => {
+    const library = await (await page.request.get('/api/library')).json();
+    return library.items.find((item: { title: string }) => item.title === title)?.body;
+  });
 
 test('the integrated type filter, center image canvas and panel shortcut work together', async ({
   page,
@@ -211,9 +216,8 @@ test('create, relate, edit, search, export, trash and restore real library items
     .filter({ hasText: `Research ${unique}` })
     .first()
     .click();
-  await expect(page.getByLabel('Markdown content')).toHaveValue(
-    '# Research\n\nLocal notes with **context**.',
-  );
+  await expect(page.getByLabel('Markdown content')).toContainText('Local notes with');
+  await storedNote(page, `Research ${unique}`).toBe('# Research\n\nLocal notes with **context**.');
   await page.getByRole('button', { name: 'Library', exact: true }).click();
   await page.getByLabel('Import files', { exact: true }).setInputFiles({
     name: `reference-${unique}.png`,
@@ -230,6 +234,7 @@ test('create, relate, edit, search, export, trash and restore real library items
   await saved(page);
   await expect(page.getByText('related to', { exact: false }).first()).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
+  await page.locator('.inspector-export').getByText('Export', { exact: true }).click();
   await page.getByRole('link', { name: 'Export original' }).click();
   expect((await downloadPromise).suggestedFilename()).toBe(`reference-${unique}.png`);
   await page.getByRole('button', { name: 'Move to trash' }).click();
@@ -265,7 +270,7 @@ test('autosave preserves overlapping local and external edits until resolved', a
   await page.getByRole('button', { name: 'Library', exact: true }).click();
   await page.reload();
   await page.locator('.asset-open').filter({ hasText: title }).click();
-  await expect(page.getByLabel('Markdown content')).toHaveValue('My unsaved draft');
+  await expect(page.getByLabel('Markdown content')).toHaveText('My unsaved draft');
   await page.getByRole('button', { name: 'Keep my edits' }).click();
   await saved(page);
 });
@@ -315,17 +320,19 @@ test('image quick preview, colors, gallery layouts and linked note editing', asy
   await newNote(page);
   await page.getByLabel('Note title').fill('Reference study');
   const editor = page.getByLabel('Markdown content');
-  await editor.fill('/heading 2');
+  await editor.pressSequentially('/heading 2');
+  await expect(page.getByRole('button', { name: 'Heading 2', exact: true })).toBeVisible();
   await editor.press('Enter');
-  await expect(editor).toHaveValue('## ');
+  await expect(editor).toHaveText('##');
   await editor.pressSequentially('Palette');
   await editor.press('Enter');
   await editor.press('Enter');
-  await page.getByRole('button', { name: 'Link an item', exact: true }).click();
+  await editor.pressSequentially('/embed');
+  await expect(page.getByRole('button', { name: 'Embed Atlas images' })).toBeVisible();
+  await editor.press('Enter');
   await page.getByLabel('Find Atlas item').fill(filename);
-  await page.getByLabel('Embed images').check();
   await page.getByRole('button', { name: new RegExp(filename) }).click();
-  await expect(editor).toHaveValue(/## Palette\n\n!\[Canvas.*\]\(atlas:/);
+  await storedNote(page, 'Reference study').toMatch(/## Palette\n+!\[Canvas.*\]\(atlas:/);
   await page.getByRole('button', { name: 'Read', exact: true }).click();
   await saved(page);
   await expect(page.getByRole('button', { name: 'Read', exact: true })).toHaveAttribute(
@@ -435,4 +442,35 @@ test('nested folder, clipboard import, Smart Folder, and Trash Undo work across 
   await expect(page.locator('.asset-open').filter({ hasText: title })).toHaveCount(0);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect(page.locator('.asset-open').filter({ hasText: title })).toBeVisible();
+});
+
+test('an attached image follows the note tags and links survive tabs and split graph', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const title = 'Study with source images ' + Date.now();
+  await newNote(page);
+  await page.getByLabel('Note title').fill(title);
+  await page.getByLabel('Tags', { exact: true }).fill('type-study');
+  await page.getByLabel('Markdown content').fill('# Source images');
+  await page.locator('.note-insert input[type=file]').setInputFiles({
+    name: 'Inline source.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  });
+  await storedNote(page, title).toMatch(/!\[Inline source.png\]\(atlas:/);
+  const snapshot = await (await page.request.get('/api/library')).json();
+  expect(
+    snapshot.items.find((item: { title: string }) => item.title === 'Inline source.png').tags,
+  ).toContain('type-study');
+  await page.getByLabel('Show note beside graph').click();
+  await expect(page.getByLabel('Relations graph')).toBeVisible();
+  await page.getByLabel('New workspace tab').click();
+  await expect(page.getByRole('tab')).toHaveCount(2);
+  await page.getByRole('tab', { name: title }).click();
+  await expect(page.getByLabel('Note title')).toHaveValue(title);
+  await expect(page.getByLabel('Relations graph')).toBeVisible();
 });

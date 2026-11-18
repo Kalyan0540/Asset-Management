@@ -1,6 +1,6 @@
 {
   "name": "asset-management",
-  "version": "0.8.0",
+  "version": "0.9.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -23,6 +23,10 @@
     "package:desktop": "npm run build:desktop && electron-builder --publish never"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@tanstack/react-table": "^8.21.3",
     "cytoscape": "^3.33.1",

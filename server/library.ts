@@ -1,5 +1,6 @@
 import { matchesSmartFolder, smartFolderSchema, type SmartFolder } from '../shared/filters.ts';
 import { eagleFolders } from './eagle-folders.ts';
+import { descendantIds } from '../shared/collections.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
@@ -54,6 +55,7 @@ export class Library {
       );
       CREATE TABLE IF NOT EXISTS smart_folders(id TEXT PRIMARY KEY,data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS tag_groups(name TEXT PRIMARY KEY,data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS removed_folders(id TEXT PRIMARY KEY,data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS history(item_id TEXT NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
         action TEXT NOT NULL, actor TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY(item_id, revision));`);
     if (
@@ -152,6 +154,78 @@ export class Library {
       return { id, name, title, parentId: folder.parentId ?? null };
     });
   }
+  folderRemoval(id: string) {
+    const folders = this.collections();
+    const ids = descendantIds(folders, id);
+    const branch = [...ids].flatMap((entry) => folders.filter((folder) => folder.id === entry));
+    if (!branch.length) throw new LibraryError(404, 'Folder not found.');
+    const memberships = this.list().flatMap((item) => {
+      const removed = item.collections.filter((folder) => ids.has(folder));
+      return removed.length ? [{ id: item.id, revision: item.revision, folders: removed }] : [];
+    });
+    const key = createHash('sha256').update(JSON.stringify({ branch, memberships })).digest('hex');
+    return { branch, memberships, key };
+  }
+  removeFolder(id: string, key: string, actor: string) {
+    return this.transaction(() => {
+      const plan = this.folderRemoval(id);
+      if (key !== plan.key) throw new LibraryError(409, 'The folder changed. Review it again.');
+      const ticket = randomUUID();
+      const updatedAt = new Date().toISOString();
+      for (const membership of plan.memberships) {
+        const item = this.get(membership.id);
+        const collections = item.collections.filter(
+          (folder) => !membership.folders.includes(folder),
+        );
+        this.save(
+          { ...item, collections, updatedAt, revision: item.revision + 1 },
+          'remove folder',
+          actor,
+        );
+      }
+      const remove = this.db.prepare('DELETE FROM collections WHERE id=?');
+      for (const folder of [...plan.branch].reverse()) remove.run(folder.id);
+      this.db.prepare('INSERT INTO removed_folders VALUES(?,?)').run(ticket, JSON.stringify(plan));
+      return { ticket };
+    });
+  }
+  restoreFolder(ticket: string, actor: string) {
+    return this.transaction(() => {
+      const row = this.db.prepare('SELECT data FROM removed_folders WHERE id=?').get(ticket) as
+        { data: string } | undefined;
+      if (!row) throw new LibraryError(404, 'Folder undo is unavailable.');
+      const plan: ReturnType<Library['folderRemoval']> = JSON.parse(row.data);
+      const existing = this.collections();
+      const parent = plan.branch[0].parentId;
+      if (parent && !existing.some((folder) => folder.id === parent))
+        throw new LibraryError(409, 'Restore the parent folder first.');
+      const add = this.db.prepare('INSERT INTO collections VALUES(?,?)');
+      const tree = this.db.prepare('INSERT INTO collection_tree VALUES(?,?,?)');
+      for (const folder of plan.branch) {
+        let name = folder.name;
+        if (existing.some((entry) => entry.name === name)) name += ` [${folder.id}]`;
+        add.run(folder.id, name);
+        tree.run(folder.id, folder.parentId ?? null, folder.title ?? folder.name);
+      }
+      const updatedAt = new Date().toISOString();
+      for (const membership of plan.memberships) {
+        const item = this.get(membership.id);
+        const collections = [...new Set([...item.collections, ...membership.folders])];
+        if (collections.length > 100)
+          throw new LibraryError(
+            409,
+            'An item has too many folders. Remove a membership and retry.',
+          );
+        this.save(
+          { ...item, collections, updatedAt, revision: item.revision + 1 },
+          'restore folder',
+          actor,
+        );
+      }
+      this.db.prepare('DELETE FROM removed_folders WHERE id=?').run(ticket);
+      return { id: plan.branch[0].id };
+    });
+  }
   eagleFolderRepair() {
     const exists = this.db
       .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='import_reports'")
@@ -212,7 +286,11 @@ export class Library {
   }
   saveSmartFolder(input: unknown, id = randomUUID() as string) {
     const data = smartFolderSchema.parse(input);
-    if (data.addFolder && !this.collections().some((folder) => folder.id === data.addFolder))
+    if (
+      data.addFolder &&
+      !this.collections().some((folder) => folder.id === data.addFolder) &&
+      !this.smartFolders().some((folder) => folder.id === id && folder.addFolder === data.addFolder)
+    )
       throw new LibraryError(400, 'The import rule folder does not exist.');
     if (
       (data.addFolder || data.addTag) &&
@@ -456,7 +534,12 @@ export class Library {
       const collections = [
         ...new Set([
           ...item.collections,
-          ...rules.flatMap((folder) => (folder.addFolder ? [folder.addFolder] : [])),
+          ...rules.flatMap((folder) =>
+            folder.addFolder &&
+            this.db.prepare('SELECT id FROM collections WHERE id=?').get(folder.addFolder)
+              ? [folder.addFolder]
+              : [],
+          ),
         ]),
       ].slice(0, 100);
       return this.save({ ...item, tags, collections, revision: 2 }, 'import rules', actor);
@@ -536,11 +619,14 @@ export class Library {
         title: old.title,
         description: old.description,
         tags: old.tags,
-        collections: old.collections,
+        collections: old.collections.filter((id) =>
+          this.collections().some((folder) => folder.id === id),
+        ),
         relations: old.relations,
         ...(old.kind === 'note' ? { body: old.body } : {}),
         favorite: old.favorite,
         rating: old.rating ?? 0,
+        primaryColor: old.primaryColor ?? '',
         sourceUrl: old.sourceUrl ?? '',
         trashed: old.trashed,
       },

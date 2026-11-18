@@ -1,6 +1,13 @@
-# Implementation status — Atlas 0.8 desktop and Android preview
+# Implementation status — Atlas workspace and Android preview
 
 18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
+
+## Workspace improvements in 0.9
+
+- Live Markdown headings, stable inline image imports, a caret-positioned picker, multi-item links and typed relations. Independent desktop tabs restore workspace state, and a note can open alongside its local graph.
+- The inspector offers swatch coverage, supported color copy formats and primary color. Export includes CSV and single-image resizing or conversion. Folders have a deletion preview and undo, while tag and folder filters support multiple includes and excludes.
+- Local AI supports note drafts and a persisted batch suggestion queue for tags, descriptions, folder memberships and related items. Selection of automatic tags and existing folder memberships is explicit per batch. Generic desktop MCP includes a proposal tool when write tools are enabled.
+- Android adds the share review and recoverable inbox, native photo selection, nested folders, Grid and List, Smart Folders, Markdown links and images, a local connection graph, batch organization, reviewable Ollama-compatible AI, and revision history.
 
 ## Chrome Capture preview
 
@@ -64,11 +71,11 @@ AI tests use a deterministic local HTTP model fixture. They establish protocol, 
 
 | Area | Remaining work |
 |---|---|
-| Android | Durable share-sheet/background recovery, graph/table/AI/MCP parity, history-restore UI, production signing and physical-device testing; initial native offline app and manual transfer implemented |
+| Android | Production signing, physical-device testing, advanced layout parity and Android MCP |
 | Multi-device | Sync transport, paired devices, resumable verified media transfer, operation IDs, conflict queue, old-device rebase and remote backups |
 | Browser capture | Durable capture queue for when Atlas is closed, wider site compatibility, and Chrome Web Store distribution |
 | Migration | Real-world Eagle fixture validation, additional layouts/.eaglepack support and incremental merge; richer Obsidian import; import Markdown assets as editable notes |
-| Knowledge tools | External Markdown reconciliation, autosaved drafts, rendered editing, wiki-link resolution/backlinks, embeds, custom property schemas, independent records, formulas and rollups |
+| Knowledge tools | External Markdown reconciliation, unqualified wiki-link resolution, custom property schemas, independent records, formulas and rollups |
 | AI | Provider credentials, hosted adapters, model installation, persisted work queue/resume, OCR, embeddings, visual similarity, controlled-vocabulary rules and evaluation sets |
 | Organization/media | Folder moves and merging within a library, whole-operation tag undo, cross-library search, richer filter operators, EXIF, generated video posters, thumbnails/proxies, and specialist formats |
 | Scale | Indexed/paginated queries, virtualized grid, 50,000-item and multi-GB media benchmarking |

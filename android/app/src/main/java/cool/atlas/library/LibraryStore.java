@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONException;
 
 /** Same schema-1 catalog and immutable blobs as Atlas desktop. All writes serialize here. */
 public final class LibraryStore implements AutoCloseable {
@@ -41,6 +42,9 @@ public final class LibraryStore implements AutoCloseable {
       db.execSQL("CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY, data TEXT NOT NULL)");
       db.execSQL(
           "CREATE TABLE IF NOT EXISTS collections(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE)");
+      db.execSQL("CREATE TABLE IF NOT EXISTS removed_folders(id TEXT PRIMARY KEY,data TEXT NOT NULL)");
+      db.execSQL("CREATE TABLE IF NOT EXISTS smart_folders(id TEXT PRIMARY KEY,data TEXT NOT NULL)");
+      db.execSQL("CREATE TABLE IF NOT EXISTS collection_tree(id TEXT PRIMARY KEY REFERENCES collections(id) ON DELETE CASCADE,parent_id TEXT REFERENCES collections(id),title TEXT NOT NULL)");
       db.execSQL(
           "CREATE TABLE IF NOT EXISTS history(item_id TEXT NOT NULL,revision INTEGER NOT NULL,data"
               + " TEXT NOT NULL,action TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,PRIMARY"
@@ -61,9 +65,9 @@ public final class LibraryStore implements AutoCloseable {
 
   public synchronized List<JSONObject> collections() throws Exception {
     List<JSONObject> result = new ArrayList<>();
-    try (Cursor c = db.rawQuery("SELECT id,name FROM collections ORDER BY name", null)) {
+    try (Cursor c = db.rawQuery("SELECT c.id,c.name,coalesce(t.title,c.name),t.parent_id FROM collections c LEFT JOIN collection_tree t ON c.id=t.id ORDER BY c.name", null)) {
       while (c.moveToNext())
-        result.add(new JSONObject().put("id", c.getString(0)).put("name", c.getString(1)));
+        result.add(new JSONObject().put("id", c.getString(0)).put("name", c.getString(1)).put("title", c.getString(2)).put("parentId", c.isNull(3) ? JSONObject.NULL : c.getString(3)));
     }
     return result;
   }
@@ -122,9 +126,15 @@ public final class LibraryStore implements AutoCloseable {
   }
 
   public synchronized JSONObject note(String title, String body) throws Exception {
+    return captureNote(UUID.randomUUID().toString(), title, body, "", new JSONArray(), "");
+  }
+
+  public synchronized JSONObject captureNote(String id, String title, String body, String source, JSONArray tags, String folder) throws Exception {
+    JSONObject previous = findExisting(id);
+    if (previous != null) return previous;
     validateText(title, body);
     JSONObject item =
-        base(title.trim())
+        base(title.trim()).put("id", id).put("sourceUrl", source).put("tags", tags).put("collections", captureFolder(folder))
             .put("body", body)
             .put("size", body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
     save(item, "create note");
@@ -142,7 +152,15 @@ public final class LibraryStore implements AutoCloseable {
       boolean favorite,
       boolean trashed)
       throws Exception {
+    return edit(id, revision, title, description, body, tags, collections, favorite, trashed, null, null);
+  }
+
+  public synchronized JSONObject edit(String id, int revision, String title, String description, String body,
+      JSONArray tags, JSONArray collections, boolean favorite, boolean trashed, String sourceUrl, Integer rating) throws Exception {
     validateText(title, body);
+    if (sourceUrl != null && !sourceUrl.isEmpty() && !ShareInbox.webUrl(sourceUrl))
+      throw new IOException("Use a valid http or https source link");
+    if (rating != null && (rating < 0 || rating > 5)) throw new IOException("Rating must be from 0 to 5");
     if (description.length() > 20000 || tags.length() > 100 || collections.length() > 100)
       throw new IOException("Too many tags or collections, or description is too long");
     for (int n = 0; n < tags.length(); n++)
@@ -163,6 +181,8 @@ public final class LibraryStore implements AutoCloseable {
         .put("trashed", trashed)
         .put("revision", revision + 1)
         .put("updatedAt", Instant.now().toString());
+    if (sourceUrl != null) item.put("sourceUrl", sourceUrl);
+    if (rating != null) item.put("rating", rating);
     if (item.getString("kind").equals("note"))
       item.put("body", body)
           .put("size", body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
@@ -177,17 +197,228 @@ public final class LibraryStore implements AutoCloseable {
   }
 
   public synchronized JSONObject collection(String name) throws Exception {
-    name = name.trim();
-    if (name.isEmpty() || name.length() > 80)
-      throw new IOException("Collection names must contain 1–80 characters");
-    for (JSONObject c : collections()) if (c.getString("name").equals(name)) return c;
-    String id = UUID.randomUUID().toString();
-    db.execSQL("INSERT INTO collections VALUES(?,?)", new Object[] {id, name});
-    return new JSONObject().put("id", id).put("name", name);
+    return collection(name, "");
   }
 
-  public synchronized JSONObject importFile(InputStream input, String filename, String mime)
-      throws Exception {
+  public synchronized JSONObject collection(String title, String parentId) throws Exception {
+    title = title.trim();
+    if (title.isEmpty() || title.length() > 80) throw new IOException("Collection names must contain 1–80 characters");
+    String workspaceName = title;
+    List<JSONObject> known = collections();
+    if (!parentId.isEmpty()) {
+      JSONObject parent = null;
+      for (JSONObject entry : known) if (entry.getString("id").equals(parentId)) parent = entry;
+      if (parent == null) throw new IOException("Parent folder is unavailable");
+      workspaceName = parent.getString("name") + " / " + title;
+    }
+    for (JSONObject entry : known)
+      if (title.equals(entry.getString("title")) && parentId.equals(entry.isNull("parentId") ? "" : entry.optString("parentId"))) return entry;
+    String id = UUID.randomUUID().toString();
+    for (JSONObject entry : known)
+      if (workspaceName.equals(entry.getString("name"))) { workspaceName += " [" + id + "]"; break; }
+    db.beginTransaction();
+    try {
+      db.execSQL("INSERT INTO collections VALUES(?,?)", new Object[]{id, workspaceName});
+      db.execSQL("INSERT INTO collection_tree VALUES(?,?,?)", new Object[]{id, parentId.isEmpty() ? null : parentId, title});
+      db.setTransactionSuccessful();
+    } finally { db.endTransaction(); }
+    return new JSONObject().put("id", id).put("name", workspaceName).put("title", title);
+  }
+
+  synchronized JSONObject findExisting(String id) throws JSONException {
+    try (Cursor cursor = db.rawQuery("SELECT data FROM items WHERE id=?", new String[]{id})) {
+      return cursor.moveToFirst() ? new JSONObject(cursor.getString(0)) : null;
+    }
+  }
+
+  synchronized void organizeItems(List<JSONObject> selected, JSONArray tags, String folder, Boolean trashed) throws Exception {
+    if (!folder.isEmpty() && captureFolder(folder).length() == 0) throw new IOException("Folder is unavailable");
+    db.beginTransaction();
+    try {
+      for (JSONObject original : selected) {
+        JSONObject item = get(original.getString("id"));
+        int revision = original.getInt("revision");
+        if (item.getInt("revision") != revision) throw new IOException("An item changed. Select the items again.");
+        JSONArray targetTags = item.getJSONArray("tags"), memberships = item.getJSONArray("collections");
+        for (int i=0;i<tags.length();i++) addUnique(targetTags,tags.getString(i));
+        if (!folder.isEmpty()) addUnique(memberships,folder);
+        edit(item.getString("id"),revision,item.getString("title"),item.getString("description"),
+            item.optString("body"),targetTags,memberships,item.optBoolean("favorite"),trashed == null ? item.optBoolean("trashed") : trashed);
+      }
+      db.setTransactionSuccessful();
+    } finally { db.endTransaction(); }
+  }
+
+  synchronized JSONObject previewRemoval(String key) throws Exception {
+    List<JSONObject> folders = collections();
+    LinkedHashSet<String> ids = new LinkedHashSet<>();
+    ids.add(key);
+    JSONArray branch = new JSONArray();
+    for (JSONObject folder : folders)
+      if (key.equals(folder.getString("id"))) branch.put(folder);
+    if (branch.length() == 0) throw new IOException("Folder is unavailable");
+    for (int index=0;index<branch.length();index++) {
+      String id = branch.getJSONObject(index).getString("id");
+      for (JSONObject folder : folders) {
+        if (id.equals(folder.optString("parentId")) && ids.add(folder.getString("id")))
+          branch.put(folder);
+      }
+    }
+    JSONArray memberships = new JSONArray();
+    for (JSONObject item : items()) {
+      JSONArray old = item.getJSONArray("collections"), affected = new JSONArray();
+      for (int i=0;i<old.length();i++) if (ids.contains(old.getString(i))) affected.put(old.getString(i));
+      if (affected.length() > 0) memberships.put(new JSONObject().put("id",item.getString("id"))
+          .put("revision",item.getInt("revision")).put("folders",affected));
+    }
+    return new JSONObject().put("branch",branch).put("memberships",memberships);
+  }
+
+  synchronized String removeFolder(JSONObject preview) throws Exception {
+    JSONArray branch = preview.getJSONArray("branch");
+    if (!preview.toString().equals(previewRemoval(branch.getJSONObject(0).getString("id")).toString()))
+      throw new IOException("The folder changed. Review deletion again.");
+    String ticket = UUID.randomUUID().toString();
+    db.beginTransaction();
+    try {
+      updateFolderMemberships(preview.getJSONArray("memberships"),false);
+      for (int index=branch.length()-1;index>=0;index--) {
+        String id = branch.getJSONObject(index).getString("id");
+        db.execSQL("DELETE FROM collection_tree WHERE id=?",new String[]{id});
+        db.execSQL("DELETE FROM collections WHERE id=?",new String[]{id});
+      }
+      db.execSQL("INSERT INTO removed_folders VALUES(?,?)",new String[]{ticket,preview.toString()});
+      db.setTransactionSuccessful();
+      return ticket;
+    } finally { db.endTransaction(); }
+  }
+
+  synchronized String restoreFolder(String ticket) throws Exception {
+    try (Cursor rows = db.rawQuery("SELECT data FROM removed_folders WHERE id=?",new String[]{ticket})) {
+      if (!rows.moveToFirst()) throw new IOException("Folder undo is unavailable");
+      JSONObject preview = new JSONObject(rows.getString(0));
+      JSONArray branch = preview.getJSONArray("branch");
+      Set<String> names = new HashSet<>(), ids = new HashSet<>();
+      for (JSONObject current : collections()) { names.add(current.getString("name")); ids.add(current.getString("id")); }
+      db.beginTransaction();
+      try {
+        for (int i=0;i<branch.length();i++) {
+          JSONObject folder = branch.getJSONObject(i);
+          String id = folder.getString("id"), name = folder.getString("name");
+          String parent = folder.isNull("parentId") ? null : folder.getString("parentId");
+          if (parent != null && !ids.contains(parent)) throw new IOException("Restore the parent folder first");
+          if (names.contains(name)) name += " [" + id + "]";
+          db.execSQL("INSERT INTO collections VALUES(?,?)",new Object[]{id,name});
+          db.execSQL("INSERT INTO collection_tree VALUES(?,?,?)",new Object[]{id,parent,folder.getString("title")});
+          ids.add(id);
+          names.add(name);
+        }
+        updateFolderMemberships(preview.getJSONArray("memberships"),true);
+        db.execSQL("DELETE FROM removed_folders WHERE id=?",new String[]{ticket});
+        db.setTransactionSuccessful();
+      } finally { db.endTransaction(); }
+      return branch.getJSONObject(0).getString("id");
+    }
+  }
+
+  private void updateFolderMemberships(JSONArray changes, boolean restore) throws Exception {
+    for (int i=0;i<changes.length();i++) {
+      JSONObject change = changes.getJSONObject(i);
+      JSONObject item = get(change.getString("id"));
+      LinkedHashSet<String> current = new LinkedHashSet<>();
+      JSONArray original = item.getJSONArray("collections"), affected = change.getJSONArray("folders");
+      for (int n=0;n<original.length();n++) current.add(original.getString(n));
+      for (int n=0;n<affected.length();n++)
+        if (restore) current.add(affected.getString(n)); else current.remove(affected.getString(n));
+      if (current.size() > 100) throw new IOException("An item already has too many folders");
+      item.put("collections",new JSONArray(current)).put("revision",item.getInt("revision")+1)
+          .put("updatedAt",Instant.now().toString());
+      save(item,restore ? "restore folder" : "remove folder");
+    }
+  }
+
+  synchronized List<JSONObject> smartFolders() throws Exception {
+    List<JSONObject> values = new ArrayList<>();
+    try (Cursor rows = db.rawQuery("SELECT data FROM smart_folders ORDER BY rowid", null)) {
+      while (rows.moveToNext()) values.add(new JSONObject(rows.getString(0)));
+    }
+    return values;
+  }
+
+  synchronized String saveSmartFolder(String name, String field, String value) throws Exception {
+    if (name.trim().isEmpty() || name.length() > 80 || value.trim().isEmpty() || value.length() > 120)
+      throw new IOException("Enter a valid name and filter");
+    String id = UUID.randomUUID().toString();
+    JSONObject rule = new JSONObject().put("field", field).put("operator", "contains").put("value", value.trim());
+    JSONObject filter = new JSONObject().put("id", id).put("name", name.trim()).put("match", "all")
+        .put("rules", new JSONArray().put(rule));
+    db.execSQL("INSERT INTO smart_folders VALUES(?,?)", new Object[]{id, filter.toString()});
+    return id;
+  }
+
+  private boolean matchesRule(JSONObject item, JSONObject rule) {
+    List<String> values = new ArrayList<>();
+    String field = rule.optString("field");
+    if ("tag".equals(field) || "folder".equals(field)) {
+      JSONArray property = item.optJSONArray("tag".equals(field) ? "tags" : "collections");
+      if (property != null) for (int n=0;n<property.length();n++) values.add(property.optString(n));
+      if (values.isEmpty()) values.add("tag".equals(field) ? "__untagged__" : "__uncategorized__");
+    } else if ("type".equals(field)) {
+      String name = item.optString("filename"), mime = item.optString("mime");
+      values.add(mime);
+      values.add(mime.split("/", 2)[0]);
+      String ext = "note".equals(item.optString("kind")) ? "md" : name.substring(name.lastIndexOf('.') + 1);
+      values.add("jpeg".equalsIgnoreCase(ext) ? "jpg" : ext);
+      values.add(ext);
+    } else if ("rating".equals(field)) values.add(Integer.toString(item.optInt("rating")));
+    else if ("name".equals(field)) values.add(item.optString("title"));
+    else if ("color".equals(field)) values.add(item.optString("primaryColor"));
+    else if ("shape".equals(field)) {
+      JSONObject source = item.optJSONObject("source");
+      JSONObject metadata = source == null ? null : source.optJSONObject("metadata");
+      if (metadata != null) {
+        double width = metadata.optDouble("width"), height = metadata.optDouble("height");
+        if (width > 0 && height > 0) values.add(Math.abs(width / height - 1) < 0.04 ? "square" : width > height ? "landscape" : "portrait");
+      }
+    }
+    String needle = rule.optString("value").toLowerCase(Locale.ROOT), op = rule.optString("operator");
+    boolean found = false;
+    for (String value : values)
+      if ("contains".equals(op) ? value.toLowerCase(Locale.ROOT).contains(needle) : value.equalsIgnoreCase(needle)) found = true;
+    return "is not".equals(op) ? !found : found;
+  }
+
+  boolean matchesSmartFolder(JSONObject item, JSONObject filter) {
+    JSONArray rules = filter.optJSONArray("rules");
+    if (rules == null || rules.length() == 0) return false;
+    boolean any = "any".equals(filter.optString("match"));
+    Map<String,Boolean> groups = new HashMap<>();
+    for (int n=0;n<rules.length();n++) {
+      JSONObject rule = rules.optJSONObject(n);
+      if (rule == null) continue;
+      boolean match = matchesRule(item, rule);
+      if (!any && rule.optBoolean("anyWithinField") && !"is not".equals(rule.optString("operator"))) {
+        String field = rule.optString("field");
+        groups.put(field, match || Boolean.TRUE.equals(groups.get(field)));
+      } else if (match == any) return any;
+    }
+    return !any && !groups.containsValue(false);
+  }
+
+  private JSONArray captureFolder(String id) throws Exception {
+    for (JSONObject folder : collections())
+      if (folder.getString("id").equals(id)) return new JSONArray().put(id);
+    return new JSONArray();
+  }
+
+  public synchronized JSONObject importFile(InputStream input, String filename, String mime) throws Exception {
+    return captureFile(UUID.randomUUID().toString(), input, filename, mime, "", new JSONArray(), "");
+  }
+
+  public synchronized JSONObject captureFile(String id, InputStream input, String filename, String mime,
+      String source, JSONArray tags, String folder) throws Exception {
+    JSONObject previous = findExisting(id);
+    if (previous != null) { input.close(); return previous; }
     filename = filename.replace('\\', '/');
     filename = filename.substring(filename.lastIndexOf('/') + 1).replaceAll("[\\x00-\\x1f]", "");
     if (filename.trim().isEmpty()) filename = "Imported file";
@@ -202,15 +433,59 @@ public final class LibraryStore implements AutoCloseable {
       } else Files.move(temp.toPath(), blob.toPath(), StandardCopyOption.ATOMIC_MOVE);
       JSONObject item =
           base(filename)
+              .put("id", id)
+              .put("collections", captureFolder(folder))
+              .put("tags", tags)
+              .put("sourceUrl", source)
+              .put("importedAt", Instant.now().toString())
               .put("kind", "asset")
               .put("filename", filename)
               .put("hash", hash)
               .put("mime", mime == null ? "application/octet-stream" : mime)
               .put("size", blob.length());
+      for (JSONObject filter : smartFolders()) {
+        if (!matchesSmartFolder(item, filter)) continue;
+        String tag = filter.optString("addTag"), destination = filter.optString("addFolder");
+        if (!tag.isEmpty()) item.put("tags", addUnique(item.getJSONArray("tags"), tag));
+        if (!destination.isEmpty() && captureFolder(destination).length() != 0)
+          item.put("collections", addUnique(item.getJSONArray("collections"), destination));
+      }
       save(item, "import");
       return item;
     } finally {
       temp.delete();
+    }
+  }
+
+  private JSONArray addUnique(JSONArray list, String value) {
+    if (list.length() >= 100) return list;
+    for (int n=0;n<list.length();n++) if (value.equals(list.optString(n))) return list;
+    return list.put(value);
+  }
+
+  public synchronized List<JSONObject> history(String id) throws Exception {
+    List<JSONObject> entries = new ArrayList<>();
+    try (Cursor rows = db.rawQuery("SELECT data,action,at FROM history WHERE item_id=? ORDER BY revision DESC", new String[]{id})) {
+      while (rows.moveToNext()) entries.add(new JSONObject(rows.getString(0)).put("historyAction",rows.getString(1)).put("historyTime",rows.getString(2)));
+    }
+    return entries;
+  }
+
+  public synchronized JSONObject restore(String id, int revision, int expected) throws Exception {
+    JSONObject current = get(id);
+    if (current.getInt("revision") != expected) throw new IOException("This item changed. Reopen its history.");
+    try (Cursor rows = db.rawQuery("SELECT data FROM history WHERE item_id=? AND revision=?",new String[]{id,Integer.toString(revision)})) {
+      if (!rows.moveToFirst()) throw new IOException("Version is unavailable");
+      JSONObject value = new JSONObject(rows.getString(0));
+      JSONArray memberships = value.getJSONArray("collections");
+      Set<String> available = new HashSet<>();
+      for (JSONObject folder : collections()) available.add(folder.getString("id"));
+      JSONArray restored = new JSONArray();
+      for (int index=0; index<memberships.length(); index++)
+        if (available.contains(memberships.getString(index))) restored.put(memberships.getString(index));
+      value.put("collections", restored).put("revision", expected + 1).put("updatedAt", Instant.now().toString());
+      save(value, "restore revision");
+      return value;
     }
   }
 

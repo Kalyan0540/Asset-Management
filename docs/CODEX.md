@@ -8,7 +8,9 @@ Use Atlas 0.4 or newer and run Codex locally on the same computer. Atlas include
 
 The copied setup offers search across titles, descriptions, tags and note text. Codex can read item metadata and note bodies, and view PNG, JPEG, WebP and GIF originals up to 4 MiB. The setup provides access to the whole active library through read tools. Codex receives the contents returned by the tools you let it run. If you switch Atlas libraries, the adapter follows the active library.
 
-Use **Agents → Copy Read-only MCP Configuration** for a local MCP client that accepts JSON. Atlas's **AI suggestions** panel is a separate feature that uses a local Ollama model to propose tags and descriptions.
+Use **Agents → Copy Read-only MCP Configuration** for a local MCP client that accepts JSON. Atlas's **AI suggestions** panel connects to Ollama for writing drafts, tags, descriptions, folder memberships and relationships.
+
+Atlas 0.9 also supports queueing reviewable organization proposals from a compatible local agent. Set `ATLAS_MCP_WRITE=1` in the adapter environment to expose `propose_organization`, `update_item`, and `create_note`. The proposal tool accepts selected item IDs and an installed Ollama model name. Review the results in Atlas. This opt-in grants whole-library write tools, so use the read-only configuration when you only want the assistant to find and summarize your material.
 
 ## ChatGPT on the web and cloud Codex
 

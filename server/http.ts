@@ -18,7 +18,7 @@ import { Transform } from 'node:stream';
 import { z, ZodError } from 'zod';
 import { Library, LibraryError } from './library.ts';
 import { names, patchSchema } from '../shared/model.ts';
-import { LocalAI } from './ai.ts';
+import { LocalAI, writingModes } from './ai.ts';
 import { commitStagedBlob } from './blobs.ts';
 
 const MAX_JSON = 2_000_000;
@@ -102,19 +102,45 @@ export function createLibraryServer(options: {
           return json(res, 200, ai.list());
         if (url.pathname === '/api/ai/jobs' && req.method === 'POST') {
           const input = z
-            .object({ itemId: z.string().uuid(), model: z.string().min(1).max(200) })
+            .object({
+              itemId: z.string().uuid(),
+              model: z.string().min(1).max(200),
+              mode: z.enum(writingModes).optional(),
+            })
             .strict()
             .parse(await body(req));
-          return json(res, 202, ai.start(input.itemId, input.model));
+          return json(res, 202, ai.start(input.itemId, input.model, input.mode));
+        }
+        if (url.pathname === '/api/ai/batch' && req.method === 'POST') {
+          const input = z
+            .object({
+              items: z.array(z.string().uuid()).min(1).max(100),
+              model: z.string().min(1).max(200),
+              autoFile: z.boolean().default(false),
+            })
+            .strict()
+            .parse(await body(req));
+          if (actor === 'agent' && input.autoFile)
+            throw new LibraryError(403, 'Automatic application starts in Atlas.');
+          return json(
+            res,
+            202,
+            ai.startBatch(input.items, input.model, 'organize', input.autoFile),
+          );
         }
         const aiAction = url.pathname.match(/^\/api\/ai\/jobs\/([\w-]+)\/(apply|cancel)$/);
         if (aiAction && req.method === 'POST') {
           if (aiAction[2] === 'cancel') return json(res, 200, ai.cancel(aiAction[1]));
           const input = z
-            .object({ includeDescription: z.boolean().default(false) })
+            .object({
+              includeDescription: z.boolean().default(false),
+              includeFolders: z.boolean().optional(),
+              includeConnections: z.boolean().optional(),
+              includeDraft: z.boolean().optional(),
+            })
             .strict()
             .parse(await body(req));
-          return json(res, 200, ai.apply(aiAction[1], input.includeDescription));
+          return json(res, 200, ai.apply(aiAction[1], input.includeDescription, input));
         }
         if (url.pathname === '/api/library' && req.method === 'GET')
           return json(res, 200, {
@@ -220,6 +246,24 @@ export function createLibraryServer(options: {
           return json(res, 200, library.repairEagleFolders(input.key));
         }
         const collectionPath = url.pathname.match(/^\/api\/collections\/([\w-]+)$/);
+        if (collectionPath && req.method === 'GET') {
+          const { branch, memberships, key } = library.folderRemoval(collectionPath[1]);
+          return json(res, 200, { branch, affected: memberships.length, key });
+        }
+        if (collectionPath && req.method === 'DELETE') {
+          const { key } = z
+            .object({ key: z.string().regex(/^[0-9a-f]{64}$/) })
+            .strict()
+            .parse(await body(req));
+          return json(res, 200, library.removeFolder(collectionPath[1], key, actor));
+        }
+        if (url.pathname === '/api/collections/undo' && req.method === 'POST') {
+          const { ticket } = z
+            .object({ ticket: z.string().uuid() })
+            .strict()
+            .parse(await body(req));
+          return json(res, 200, library.restoreFolder(ticket, actor));
+        }
         if (collectionPath && req.method === 'PATCH') {
           const input = z
             .object({ name: z.string().trim().min(1).max(80) })
@@ -246,6 +290,17 @@ export function createLibraryServer(options: {
             .slice(0, 250);
           if (!name || name === '.' || name === '..')
             throw new LibraryError(400, 'A valid filename is required');
+          const rawTags = url.searchParams.get('tags');
+          let tags: string[] | undefined;
+          if (rawTags) {
+            let decoded: unknown;
+            try {
+              decoded = JSON.parse(rawTags);
+            } catch {
+              throw new LibraryError(400, 'Import tags are invalid');
+            }
+            tags = z.array(z.string().trim().min(1).max(80)).max(100).parse(decoded);
+          }
           const limit = options.maxUploadBytes ?? 2 * 1024 * 1024 * 1024;
           if (Number(req.headers['content-length']) > limit)
             throw new LibraryError(413, 'File exceeds the upload limit');
@@ -274,6 +329,7 @@ export function createLibraryServer(options: {
                 mime: previewTypes[extname(name).toLowerCase()] ?? 'application/octet-stream',
                 size,
                 hash: digest,
+                ...(tags ? { tags } : {}),
               },
               actor,
               url.searchParams.has('folder')

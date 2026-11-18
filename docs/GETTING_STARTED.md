@@ -31,7 +31,7 @@ These early downloads are not yet signed with a verified publisher certificate o
 1. Click **Import files**, or drag a few images, videos or documents into the window. Atlas copies the files; the originals stay where they were.
 2. Click an item. Edit the title, description, or tags in the right panel. Atlas saves edits automatically in 0.7 and newer.
 3. Use **+** next to Collections to make a folder-like collection. An item can belong to more than one collection without duplicating its file.
-4. Choose **New → New note** to open the editor in the center. Type `/` at the start of a line for headings, lists and other commands. Use **Link an item** to link a note or embed an image. Atlas autosaves the note. Saved links appear in Graph when both items are in the current view.
+4. Choose **New → New note** to open the editor in the center. Type `/` at the start of a line for headings, lists and other commands. Use **Link an item** or type `/link`, `/embed`, or `/connect` to find and attach Atlas items. Paste or drop pictures into the editor to save originals and embed them inline. Atlas autosaves the note. Saved links appear in Graph when both items are in the current view.
 5. Hover the magnifying glass for a quick peek, or click it to open the preview. On a touch screen, tap the magnifying glass. Use **Grid** or **List** to browse and **View options** to switch to Justified or Waterfall. Select an image to copy colors from the inspector.
 6. Use Shift-click to select a range, or drag a selection rectangle from empty space. You can tag, collect, favorite or trash the selected items together.
 7. Double-click an asset for a larger preview in the center. Use the arrow keys to browse and press Escape to return to the gallery.
@@ -41,10 +41,10 @@ Your library is saved automatically on this computer as you import files and mak
 ## Use the compact workspace
 
 - Use **Appearance** in the top bar for **System**, **Light**, or **Dark**. Press **Ctrl+/** or **Command+/** to hide or restore both side panels.
-- Right-click a thumbnail to open its searchable actions.
+- Right-click a thumbnail to open its searchable actions or open it in a new tab. Open a note and click the graph icon in the tab bar to show its connections side by side.
 - Use the plus next to **Folders** to create a root folder. Right-click an existing folder and choose **New subfolder** to nest one. A parent lists its subfolders first. Turn on **Show subfolder contents** to include their items in the gallery below.
 - Paste an image into the workspace to save a timestamped file. Pasting into an editor or search field still edits the field. File imports and clipboard captures go into the active library and the selected ordinary folder, where applicable.
-- Use the **Export** menu for selected originals or Markdown and catalog JSON. The native selected-files export asks where to save, and appends numbers when a name already exists. Use a full backup for transfer or recovery.
+- Use **Export** for originals, Markdown, metadata CSV, catalog JSON, or a converted image. The native selected-files export asks where to save, and appends numbers when a name already exists. Use a full backup for transfer or recovery.
 - In the library picker, **Repair Eagle folders…** previews matching paths from older Eagle imports before changing their hierarchy. Unmatched path names remain in place. Take a library backup first if you want an independent recovery copy.
 - **Smart Folders** remember filters. Optional import actions can add a tag or folder membership to future matching desktop imports. Review the change in the item's revision history.
 - In **All Tags**, click the pencil beside a tag. Enter a new name to rename it, or enter an existing tag to combine them. **Review changes** shows which items, tag groups and smart folders will be affected. Edit a tag group to rename it, combine it with another group by entering that group's name, or remove it.

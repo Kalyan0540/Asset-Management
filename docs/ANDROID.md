@@ -1,37 +1,33 @@
-# Atlas Android 0.3 preview
+# Atlas Android 0.4.2 preview
 
-An installable offline Android app for Android 8.0 or newer. This is an initial Android implementation, not desktop feature parity or automatic sync. An APK is published only after the Android compile, lint and emulator checks pass.
+Use Atlas offline on Android 8 or newer. The preview is available as an APK on GitHub. [Download Atlas for Android](https://github.com/Kalyan0540/Asset-Management/releases/tag/android-v0.4.2-preview)
 
-## Install
+## Install or update
 
-Download [Atlas-0.3.0-android-preview.apk](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) on your phone and open it. Android may ask you to allow installation from the browser or Files app you are using. Allow that source for this installation, then turn that permission off again if desired. This is a test-signed preview, not a Play Store release. The signing identity is cached for development builds; it is not a durable production signing setup. Back up before any uninstall or replacement. If Android reports a signature mismatch, do not uninstall without a verified backup.
+1. If you have an older Atlas preview, make a backup from **Library → Back up library** and keep the complete dated folder outside Atlas.
+2. Open the new APK on your phone. Android may ask you to allow installation from your browser or Files app.
+3. If Android reports a signing mismatch, check that your backup is complete before uninstalling the older app. Install the new APK, then choose **Library → Restore Atlas backup** and select the dated backup folder. These previews use test signing.
 
-## Included
+## Capture from other apps
 
-- Local files, original-byte storage and duplicate-byte sharing.
-- Dark native gallery, image previews and opening originals in another compatible Android app for video/audio/PDF and other formats.
-- Search, editable notes, descriptions and tags, collections, favorites and reversible Trash.
-- Android file picker for multiple imports and receiving shared files or text from other apps.
-- Manual verified backup export and restore using Android's folder picker. The catalog and immutable originals use the same schema as Atlas desktop.
-- Revision history is recorded and retained in backups. Android does not yet have a history-restore screen.
+Share an image, several files, a quote, or a website link and choose **Atlas**. Review the capture, choose tags and a folder, then save. A link share creates a note with its source. The **Photos** button opens Android's photo picker or its file picker on older phones. A Pinterest or Google Images share may contain a page link. Download an available image first if you want the actual file.
 
-Keep Atlas open until an import or backup completes. The current share receiver does not persist a background job across process termination. A failed copy creates no item, and staged files are cleared at startup; retry the share if Android closes the app mid-copy. No broad storage access or Internet permission is requested.
+Once the browser or source app's bytes have been copied into Atlas's private capture inbox, Atlas can resume after a restart. To retry an accepted capture, use **Library → Retry pending captures**. A source that became unavailable before it was copied needs to be shared again. Atlas keeps bookmark links and imported files offline.
 
-## Bring an Eagle library to Android
+## Browse, edit, and export
 
-1. On your computer, use Atlas desktop's **Library → Import Eagle Library…** and review its report.
-2. Choose **Library → Back Up Library…**.
-3. Copy the entire dated backup folder to your phone, including `catalog.sqlite`, `atlas-backup.json` and the complete `blobs` folder. A USB cable or your existing file-transfer service can move it.
-4. In Android Atlas, choose **Library → Restore Atlas backup** and select that dated folder. Atlas verifies the files before opening a separate local library.
+- Switch between Grid and List. Search titles, notes and tags. Sort results or filter by actual file type, use built-in views, and browse nested folders. Long-press an item to select multiple files, tag them, place them in a folder, or move them to Trash.
+- Create simple Smart Folders for names, tags, and file types. Backups can carry saved desktop rules as well.
+- Edit notes and details with autosave and draft recovery. Notes can link to library items and display embedded images. The **Connections** view shows a small interactive graph and a list of related items and backlinks. **Revision history** can restore a previous version.
+- Edit tags, folder memberships, ratings, descriptions and source links. Folder deletion has a preview and an Undo action. Export an original or Markdown file to a location you choose.
+- Use image and supported video previews on the phone. **Open original** uses a compatible app for playback or specialist formats.
 
-To move a phone library back to desktop, choose **Library → Back up library**, transfer the complete dated folder, and restore it from the desktop Library menu. Restore creates a separate library; it does not merge changes from two devices. Use **Libraries on this phone** to reopen previous local libraries.
+## Use AI writing and organization
 
-## Limits and verification
+Open an item and tap **AI writing and organization**. Enter an Ollama-compatible HTTPS address and the installed model name. A service running on the phone can use localhost. Generate a writing draft or a suggestion for tags, descriptions and folders, then review what to apply. Atlas sends the selected note or image when you choose Generate. Your library tools work offline.
 
-Automatic sync, Android AI/MCP, graph/table views, rich Markdown rendering, built-in specialist media previews and persistent share/background work are pending. Image previews use Android's built-in decoder; unsupported formats can still be stored/exported. Personal-library scale and physical-device behavior have not yet been certified.
+## Move a library manually
 
-The Android workflow builds/lints the APK and runs tests on an Android 11 emulator for native launch, reopen persistence, stale-write rejection, original hashing/deduplication, compatible backups, and failed-import cleanup. Workflow configuration is not proof of success; check the linked release's completed run. Desktop and Android source live on `feat/eagle-import-android` while this work is reviewed.
+On desktop, choose **Library → Back Up Library…** and copy the entire dated folder to your phone. In Android Atlas, choose **Library → Restore Atlas backup**. To go the other way, make a backup on Android and restore it in the desktop Library menu. Restore verifies the files and opens a separate local library.
 
-## Developer build
-
-Use Java 17, Android SDK 35 and Gradle 8.11.1: `gradle -p android assembleDebug`. This project uses Android's native views, SQLite and Storage Access Framework without a WebView or embedded Node server. The UI is separate from React; storage compatibility and transfers are shared at the schema/file level. Android Gradle Plugin 8.9.3 follows the [official compatibility requirements](https://developer.android.com/build/releases/agp-8-9-0-release-notes).
+The Android workflow compiles and lints the app, runs native persistence and transfer tests on an Android 11 emulator, checks recovery of accepted shares, and exercises installation. [Android build workflow](https://github.com/Kalyan0540/Asset-Management/actions/workflows/android.yml)

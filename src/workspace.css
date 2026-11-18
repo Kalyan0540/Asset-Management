@@ -1288,3 +1288,295 @@
 .app :is(input[type='checkbox'], input[type='range']) {
   accent-color: var(--accent);
 }
+
+.note-page {
+  max-width: 930px;
+  padding: clamp(14px, 3vw, 38px);
+}
+.markdown-input {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--field);
+}
+.markdown-input .cm-editor {
+  min-height: 46vh;
+  color: var(--ink);
+}
+.markdown-input .cm-editor.cm-focused {
+  outline: 1px solid var(--accent);
+}
+.markdown-input .cm-scroller {
+  font:
+    15px/1.7 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+.markdown-input .cm-content {
+  padding: 12px;
+  caret-color: var(--ink);
+}
+.markdown-input .live-h1,
+.markdown-input .live-h2,
+.markdown-input .live-h3,
+.markdown-input .live-h4,
+.markdown-input .live-h5,
+.markdown-input .live-h6,
+.markdown-input .live-strong {
+  font-weight: 650;
+}
+.markdown-input .live-h1 {
+  font-size: 1.65em;
+}
+.markdown-input .live-h2 {
+  font-size: 1.42em;
+}
+.markdown-input .live-h3 {
+  font-size: 1.2em;
+}
+.markdown-input .inline-note-image {
+  display: inline-block;
+  max-width: 100%;
+  max-height: 460px;
+  object-fit: contain;
+  vertical-align: middle;
+  border-radius: 6px;
+}
+.note-flyout.note-commands,
+.note-flyout.note-picker {
+  position: fixed;
+  z-index: 30;
+  max-width: calc(100vw - 16px);
+  box-shadow: var(--shadow);
+  background: var(--raised);
+}
+.note-flyout .note-target {
+  display: grid;
+  align-items: center;
+  gap: 4px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.note-flyout .note-target-preview {
+  display: none;
+  grid-column: 2;
+  color: var(--muted);
+  padding: 4px 8px;
+  overflow-wrap: anywhere;
+}
+.note-flyout .note-target:is(:hover, :focus-within) .note-target-preview {
+  display: block;
+}
+.note-target-preview img {
+  max-width: 100%;
+  max-height: 140px;
+  object-fit: contain;
+}
+.folder-undo {
+  bottom: 64px;
+}
+
+.ai-draft {
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  background: var(--field);
+}
+
+.palette {
+  position: relative;
+  flex-wrap: wrap;
+}
+.palette .primary-swatch {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.swatch-actions {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 10;
+  width: min(190px, 100%);
+  max-height: 300px;
+  overflow: auto;
+  box-shadow: var(--shadow);
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px;
+}
+.swatch-actions button {
+  display: block;
+  text-align: left;
+  min-height: 28px;
+  width: 100%;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+}
+.swatch-actions button:hover {
+  background: var(--hover);
+}
+
+.workspace-tabs,
+.workspace-tabs [role='tablist'],
+.workspace-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.workspace-tabs {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.workspace-tabs [role='tablist'] {
+  overflow: auto hidden;
+}
+.workspace-tab {
+  flex: 0 0 auto;
+  border-radius: 6px;
+}
+.workspace-tab:has([aria-selected='true']) {
+  background: var(--active);
+}
+.workspace-tab [role='tab'] {
+  border: 0;
+  background: transparent;
+  padding: 4px 10px;
+  min-height: 27px;
+  max-width: 160px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--ink);
+}
+.note-workspace-layout.has-note-graph {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.has-note-graph > .graph-view {
+  min-height: 400px;
+  border-left: 1px solid var(--border);
+}
+@media (max-width: 900px) {
+  .note-workspace-layout.has-note-graph {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.graph-controls {
+  max-height: min(500px, 70%);
+  overflow: auto;
+}
+.graph-filter-details select,
+.graph-connection-list button {
+  display: block;
+  width: 100%;
+}
+
+.filter-shell > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.filter-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--active);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: var(--ink);
+  max-width: 240px;
+}
+.filter-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.choice-filters .filter-options {
+  max-height: 230px;
+  overflow: auto;
+}
+.choice-filters .filter-option {
+  display: grid;
+  grid-template-columns: minmax(95px, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+.choice-filters input[type='checkbox'] {
+  width: auto;
+}
+.filter-color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.filter-color-presets .icon-button {
+  min-height: 20px;
+  height: 20px;
+  width: 20px;
+}
+
+.app .sidebar,
+.app .inspector {
+  position: relative;
+}
+.panel-resize {
+  position: absolute;
+  inset-block: 0;
+  width: 5px;
+  z-index: 6;
+  cursor: col-resize;
+  touch-action: none;
+}
+.panel-resize-left {
+  right: 0;
+}
+.panel-resize-right {
+  left: 0;
+}
+.panel-resize:hover,
+.panel-resize:focus-visible {
+  background: var(--accent);
+  opacity: 0.55;
+  outline: 0;
+}
+.inspector-export {
+  position: relative;
+}
+.inspector-export .library-popover {
+  top: auto;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: auto;
+}
+@media (max-width: 900px) {
+  .panel-resize {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .app .sidebar {
+    position: fixed;
+  }
+}
+
+@media (max-width: 950px) {
+  .app .inspector {
+    position: fixed;
+  }
+}

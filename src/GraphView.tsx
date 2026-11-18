@@ -4,25 +4,60 @@ import { Focus, Search } from 'lucide-react';
 import type { Item } from '../shared/model';
 import { noteReferences } from './NoteEditor';
 
+type Point = { x: number; y: number };
+type GraphFilters = {
+  focus: string;
+  tag: string;
+  relationship: string;
+  onlyAssets: boolean;
+  orphans: boolean;
+  attachments: boolean;
+};
+const graphMemory = new Map<
+  string,
+  { zoom: number; pan: Point; positions: Map<string, Point>; filters: GraphFilters }
+>();
+
 export function GraphView({
   items,
   selected,
   onSelect,
+  onOpenTab,
+  initialFocus = '',
+  workspaceKey,
 }: {
   items: Item[];
   selected: string | null;
   onSelect: (id: string) => void;
+  onOpenTab: (item: Item) => void;
+  initialFocus?: string;
+  workspaceKey: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const graph = useRef<Core>(null);
   const select = useRef(onSelect);
   select.current = onSelect;
-  const [focus, setFocus] = useState('');
+  const camera = useRef(graphMemory.get(workspaceKey));
+  const [focus, setFocus] = useState(camera.current?.filters.focus ?? initialFocus);
+  const [current, setCurrent] = useState('');
+  const [tag, setTag] = useState(camera.current?.filters.tag ?? '');
+  const [relationship, setRelationship] = useState(camera.current?.filters.relationship ?? '');
+  const [onlyAssets, setOnlyAssets] = useState(camera.current?.filters.onlyAssets ?? false);
   const [query, setQuery] = useState('');
-  const [orphans, setOrphans] = useState(true);
-  const [attachments, setAttachments] = useState(true);
+  const [orphans, setOrphans] = useState(camera.current?.filters.orphans ?? true);
+  const [attachments, setAttachments] = useState(camera.current?.filters.attachments ?? true);
   const mounted = useRef(false);
-  const positions = useRef(new Map<string, { x: number; y: number }>());
+  const filters = useRef<GraphFilters>({
+    focus,
+    tag,
+    relationship,
+    onlyAssets,
+    orphans,
+    attachments,
+  });
+  filters.current = { focus, tag, relationship, onlyAssets, orphans, attachments };
+  const positions = useRef(camera.current?.positions ?? new Map<string, Point>());
+  const lastFocus = useRef(focus);
   const itemMap = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const links = useMemo(
     () =>
@@ -45,10 +80,11 @@ export function GraphView({
       }),
     [items, itemMap],
   );
-  const elements = useMemo(() => {
+  const { elements, shownCount, matchCount } = useMemo(() => {
+    const matching = relationship ? links.filter((link) => link.label === relationship) : links;
     const neighborhood = new Set([focus]);
     if (focus)
-      for (const link of links) {
+      for (const link of matching) {
         if (link.source === focus) neighborhood.add(link.target);
         if (link.target === focus) neighborhood.add(link.source);
       }
@@ -57,22 +93,63 @@ export function GraphView({
         .filter(
           (item) =>
             (!focus || neighborhood.has(item.id)) &&
+            (!tag || item.tags.includes(tag) || item.id === focus) &&
+            (!onlyAssets || item.kind === 'asset' || item.id === focus) &&
             (attachments || item.kind === 'note' || item.id === focus),
         )
         .map((item) => item.id),
     );
-    const edges = links.filter((link) => shown.has(link.source) && shown.has(link.target));
+    const edges = matching.filter((link) => shown.has(link.source) && shown.has(link.target));
     const linked = new Set(edges.flatMap(({ source, target }) => [source, target]));
-    const nodes = items.filter(
+    const matchingNodes = items.filter(
       (item) => shown.has(item.id) && (orphans || linked.has(item.id) || item.id === focus),
     );
-    return [
-      ...nodes.map((item): ElementDefinition => ({
-        data: { id: item.id, label: item.title, kind: item.kind },
-      })),
-      ...edges.map((data): ElementDefinition => ({ data })),
-    ];
-  }, [items, links, focus, orphans, attachments]);
+    let visible = matchingNodes;
+    if (matchingNodes.length > 600) {
+      const adjacent = new Map<string, string[]>();
+      for (const { source, target } of edges) {
+        const outgoing = adjacent.get(source) ?? [];
+        outgoing.push(target);
+        adjacent.set(source, outgoing);
+        const incoming = adjacent.get(target) ?? [];
+        incoming.push(source);
+        adjacent.set(target, incoming);
+      }
+      const seeds = [...matchingNodes].sort(
+        (a, b) => (adjacent.get(b.id)?.length ?? 0) - (adjacent.get(a.id)?.length ?? 0),
+      );
+      const queued = new Set<string>();
+      const order: string[] = [];
+      function add(id: string) {
+        if (order.length >= 600 || queued.has(id)) return;
+        queued.add(id);
+        order.push(id);
+      }
+      if (focus) add(focus);
+      let cursor = 0;
+      for (const seed of seeds) {
+        add(seed.id);
+        while (cursor < order.length && order.length < 600)
+          for (const id of adjacent.get(order[cursor++]) ?? []) add(id);
+        if (order.length >= 600) break;
+      }
+      visible = order.flatMap((id) => itemMap.get(id) ?? []);
+    }
+    const visibleIds = new Set(visible.map((item) => item.id));
+    return {
+      elements: [
+        ...visible.map((item): ElementDefinition => ({
+          data: { id: item.id, label: item.title, kind: item.kind },
+        })),
+        ...edges
+          .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
+          .slice(0, 3200)
+          .map((data): ElementDefinition => ({ data })),
+      ],
+      shownCount: visible.length,
+      matchCount: matchingNodes.length,
+    };
+  }, [items, itemMap, links, focus, orphans, attachments, tag, relationship, onlyAssets]);
 
   useEffect(() => {
     const style = getComputedStyle(document.documentElement);
@@ -140,11 +217,26 @@ export function GraphView({
     instance.on('mouseover', 'node', (event) => highlight(event.target));
     instance.on('mouseout', 'node', () => highlight(instance.nodes(':selected').first()));
     instance.on('select unselect', 'node', () => highlight(instance.nodes(':selected').first()));
+    instance.on('tap', (event) => {
+      if (event.target === instance) setCurrent('');
+      else if (event.target.isNode()) setCurrent(event.target.id());
+    });
     instance.on('dbltap', 'node', (event) => select.current(event.target.id()));
     const resize = new ResizeObserver(() => instance.resize());
     resize.observe(host.current!);
     return () => {
       resize.disconnect();
+      instance.nodes().forEach((node) => {
+        positions.current.set(node.id(), node.position());
+      });
+      const saved = {
+        zoom: instance.zoom(),
+        pan: instance.pan(),
+        positions: positions.current,
+        filters: filters.current,
+      };
+      graphMemory.set(workspaceKey, saved);
+      if (graphMemory.size > 16) graphMemory.delete(graphMemory.keys().next().value!);
       instance.destroy();
       graph.current = null;
       mounted.current = false;
@@ -187,9 +279,13 @@ export function GraphView({
     });
     if (!mounted.current && elements.length) {
       mounted.current = true;
+      if (camera.current) {
+        instance.viewport(camera.current);
+        return;
+      }
       instance
         .layout({
-          name: elements.length < 700 ? 'cose' : 'circle',
+          name: elements.length < 185 ? 'cose' : 'circle',
           animate: false,
           fit: true,
           padding: 44,
@@ -198,7 +294,8 @@ export function GraphView({
     }
   }, [elements]);
   useEffect(() => {
-    if (focus) graph.current?.fit(undefined, 72);
+    if (focus && lastFocus.current !== focus) graph.current?.fit(undefined, 72);
+    lastFocus.current = focus;
   }, [focus]);
 
   const found = query.trim()
@@ -209,12 +306,23 @@ export function GraphView({
   function center(id: string) {
     const instance = graph.current;
     const node = instance?.getElementById(id);
-    if (!node?.length) return;
+    if (!node?.length) {
+      setFocus(id);
+      setCurrent(id);
+      return;
+    }
     instance?.$('node:selected').unselect();
     node.select();
+    setCurrent(id);
     instance?.animate({ center: { eles: node }, duration: 160 });
   }
 
+  const context = itemMap.get(current || focus || selected || '');
+  const neighbors = links
+    .filter((edge) => edge.source === context?.id || edge.target === context?.id)
+    .slice(0, 100);
+  const allTags = [...new Set(items.flatMap((item) => item.tags))].sort();
+  const labels = [...new Set(links.map((edge) => edge.label))].sort();
   return (
     <div className="graph-view">
       <div ref={host} className="graph-canvas" aria-label="Relations graph" />
@@ -277,6 +385,44 @@ export function GraphView({
           />{' '}
           Include unconnected items
         </label>
+        <details className="graph-filter-details">
+          <summary>Graph filters</summary>
+          <label>
+            Tag
+            <select value={tag} onChange={(event) => setTag(event.target.value)}>
+              <option value="">All tags</option>
+              {allTags.map((entry) => (
+                <option key={entry}>{entry}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Connection
+            <select value={relationship} onChange={(event) => setRelationship(event.target.value)}>
+              <option value="">All relationship types</option>
+              {labels.map((entry) => (
+                <option key={entry}>{entry}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={onlyAssets}
+              onChange={(event) => {
+                setOnlyAssets(event.target.checked);
+                if (event.target.checked) setAttachments(true);
+              }}
+            />{' '}
+            Assets only
+          </label>
+        </details>
+        {shownCount < matchCount && (
+          <small className="graph-display-count">
+            Showing {shownCount} of {matchCount} matching items. Search any item or narrow the graph
+            with filters.
+          </small>
+        )}
         <div className="graph-commands">
           {focus ? (
             <button className="text-button" onClick={() => setFocus('')}>
@@ -291,6 +437,26 @@ export function GraphView({
             Fit graph
           </button>
         </div>
+        {context && (
+          <details className="graph-connection-list">
+            <summary>
+              Connections for {context.title} ({neighbors.length})
+            </summary>
+            <button className="text-button" onClick={() => onOpenTab(context)}>
+              Open item in a new tab
+            </button>
+            {neighbors.map((edge) => {
+              const target = itemMap.get(edge.source === context.id ? edge.target : edge.source);
+              return (
+                target && (
+                  <button className="text-button" key={edge.id} onClick={() => onOpenTab(target)}>
+                    {edge.source === context.id ? '→' : '←'} {target.title} · {edge.label}
+                  </button>
+                )
+              );
+            })}
+          </details>
+        )}
       </section>
     </div>
   );

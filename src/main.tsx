@@ -48,6 +48,8 @@ import { useAutosave } from './useAutosave';
 import { BulkBar, Lightbox } from './LibraryTools';
 import { AiPanel } from './AiPanel';
 import { NoteEditor } from './NoteEditor';
+import { ImageExport, exportCsv } from './Exports';
+import { PanelResize } from './PanelResize';
 import { Gallery, type GalleryView, type Dimensions } from './Gallery';
 import { ImageProperties, imageColors } from './ImageProperties';
 import {
@@ -64,7 +66,7 @@ import { imageSearchExtension } from '../shared/image-search';
 import { descendantIds } from '../shared/collections';
 import {
   fileType,
-  matchesRule,
+  matchesFilterSet,
   matchesSmartFolder,
   type FilterRule,
   type SmartFolder,
@@ -270,6 +272,20 @@ function Preview({ item }: { item: Item }) {
     </div>
   );
 }
+async function uploadAsset(file: File, folder?: string, tags?: string[]): Promise<Item> {
+  const params = new URLSearchParams({ name: file.name });
+  if (folder) params.set('folder', folder);
+  if (tags?.length) params.set('tags', JSON.stringify(tags));
+  const response = await fetch('/api/import?' + params, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: file,
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error);
+  return result;
+}
+
 function Inspector({
   item,
   draft,
@@ -288,6 +304,11 @@ function Inspector({
   noteReading,
   onNoteReadingChange,
   onColorFilter,
+  onImport,
+  workspaceKey,
+  width,
+  onResize,
+  onConvert,
 }: {
   item: Item;
   items: Item[];
@@ -306,6 +327,11 @@ function Inspector({
   noteReading: boolean;
   onNoteReadingChange: (reading: boolean) => void;
   onColorFilter: (color: string) => void;
+  onImport: (file: File, tags: string[]) => Promise<Item>;
+  workspaceKey: string;
+  width: number;
+  onResize: (width: number) => void;
+  onConvert: (item: Item) => void;
 }) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [target, setTarget] = useState('');
@@ -380,6 +406,7 @@ function Inspector({
   );
   return (
     <aside className="inspector">
+      <PanelResize side="right" width={width} onResize={onResize} />
       <div className="inspector-heading">
         <span>ITEM DETAILS</span>
         <button className="icon-button" aria-label="Close details" onClick={onClose}>
@@ -398,7 +425,11 @@ function Inspector({
             <Preview item={item} />
           </div>
         )}
-        <ImageProperties item={item} onFilter={onColorFilter} />
+        <ImageProperties
+          item={draft}
+          onFilter={onColorFilter}
+          onPrimary={(color) => field('primaryColor', color)}
+        />
         <div className="detail-type">
           <ItemIcon item={item} size={14} />
           {item.kind === 'note' ? 'MARKDOWN NOTE' : item.mime.split('/')[1].toUpperCase()}
@@ -652,10 +683,24 @@ function Inspector({
         <code title={item.id}>{item.id.slice(0, 12)}…</code>
       </div>
       <div className="detail-actions">
-        <a className="secondary" href={content(item, true)}>
-          <ArrowDownToLine size={14} />
-          {item.kind === 'note' ? 'Export Markdown' : 'Export original'}
-        </a>
+        <details className="inspector-export export-menu">
+          <summary className="secondary">
+            <ArrowDownToLine size={14} /> Export
+          </summary>
+          <div className="library-popover">
+            <a href={content(item, true)}>
+              {item.kind === 'note' ? 'Export Markdown' : 'Export original'}
+            </a>
+            <button type="button" onClick={() => exportCsv([draft], collections)}>
+              Export metadata CSV
+            </button>
+            {item.mime.startsWith('image/') && (
+              <button type="button" onClick={() => onConvert(item)}>
+                Export format and size…
+              </button>
+            )}
+          </div>
+        </details>
         <button
           className="secondary"
           onClick={() => {
@@ -692,8 +737,11 @@ function Inspector({
         createPortal(
           <NoteEditor
             item={draft}
+            workspaceKey={workspaceKey}
             items={items}
             onChange={field}
+            onConnect={onEdit}
+            onImport={onImport}
             onBack={onClose}
             onOpen={onOpen}
             saveStatus={saveStatus}
@@ -705,6 +753,21 @@ function Inspector({
     </aside>
   );
 }
+type WorkspaceTab = { id: string; title: string; state?: WorkspaceState };
+type WorkspaceState = {
+  scope: string;
+  query: string;
+  types: TypeSelection;
+  view: GalleryView | 'table' | 'graph';
+  selected: string | null;
+  imageDetail: boolean;
+  readingNoteId: string | null;
+  rules: FilterRule[];
+  sort: string;
+  scroll: number;
+  split: boolean;
+};
+
 function App() {
   const [library, setLibrary] = useState<LibrarySnapshot>({ items: [], collections: [] }),
     [loading, setLoading] = useState(true),
@@ -719,6 +782,9 @@ function App() {
     [renaming, setRenaming] = useState<Collection | null>(null),
     [creating, setCreating] = useState(false),
     [menu, setMenu] = useState(false);
+  const [tabs, setTabs] = useState<WorkspaceTab[]>([{ id: 'library', title: 'Library' }]);
+  const [tabId, setTabId] = useState('library');
+  const [split, setSplit] = useState(false);
   const [editorHost, setEditorHost] = useState<HTMLDivElement | null>(null);
   const [imageDetail, setImageDetail] = useState(false);
   const [noteDetails, setNoteDetails] = useState(false);
@@ -748,11 +814,28 @@ function App() {
   const [searching, setSearching] = useState(false);
   const [randomOrder, setRandomOrder] = useState<string[]>([]);
   const [panels, setPanels] = useState({ left: true, right: true });
+  const [panelWidths, setPanelWidths] = useState(() => ({
+    left: Math.min(360, Math.max(155, Number(localStorage.getItem('atlas.leftWidth')) || 182)),
+    right: Math.min(360, Math.max(190, Number(localStorage.getItem('atlas.rightWidth')) || 232)),
+  }));
+  const [converting, setConverting] = useState<Item>();
+  function resizePanel(side: 'left' | 'right', width: number) {
+    const next = Math.round(Math.max(side === 'left' ? 155 : 190, Math.min(360, width)));
+    localStorage.setItem(side === 'left' ? 'atlas.leftWidth' : 'atlas.rightWidth', String(next));
+    setPanelWidths((previous) => ({ ...previous, [side]: next }));
+  }
   const [peek, setPeek] = useState<Item | null>(null);
   const peekTimer = useRef<number | undefined>(undefined);
   const [itemMenu, setItemMenu] = useState<{ item: Item; x: number; y: number } | null>(null);
   const [imageSearch, setImageSearch] = useState<Item>();
   const [folderMenu, setFolderMenu] = useState<{ folder: Collection; x: number; y: number }>();
+  const [folderRemoval, setFolderRemoval] = useState<{
+    branch: Collection[];
+    affected: number;
+    key: string;
+  }>();
+  const [folderUndo, setFolderUndo] = useState('');
+  const [folderBusy, setFolderBusy] = useState(false);
   const [undo, setUndo] = useState<{ id: string; patch: ItemPatch }[]>([]);
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
     const stored = localStorage.getItem('atlas.theme');
@@ -971,7 +1054,7 @@ function App() {
             const folder = library.smartFolders?.find((f) => f.id === scope.slice(6));
             if (!folder || !matchesSmartFolder(i, folder, dimensions[i.id])) return false;
           }
-          if (!rules.every((rule) => matchesRule(i, rule, dimensions[i.id]))) return false;
+          if (!matchesFilterSet(i, rules, dimensions[i.id])) return false;
           if (scope.startsWith('tag:') && !i.tags.includes(scope.slice(4))) return false;
           const type = types[fileType(i)];
           if (type === 'exclude' || (includesByType && type !== 'include')) return false;
@@ -1040,6 +1123,104 @@ function App() {
     ? library.collections.filter((entry) => entry.parentId === folder.id)
     : [];
   const inspectorOpen = panels.right && (!!item || !!folder || bulk.length > 0);
+  useEffect(() =>
+    window.atlasDesktop?.onWorkspaceCommand?.((command) => {
+      const focus = (selector: string) => document.querySelector<HTMLElement>(selector)?.focus();
+      const batch = bulk.length
+        ? library.items.filter((entry) => bulk.includes(entry.id))
+        : item
+          ? [item]
+          : [];
+      switch (command) {
+        case 'new-note':
+          void create('note');
+          break;
+        case 'new-folder':
+          void create('collection');
+          break;
+        case 'new-smart':
+          setSmart({
+            name: '',
+            match: 'all',
+            rules: rules.length ? rules : [{ field: 'name', operator: 'contains', value: '' }],
+          });
+          break;
+        case 'import-files':
+          fileInput.current?.click();
+          break;
+        case 'export-files':
+          void exportSelection(batch);
+          break;
+        case 'export-csv':
+          exportCsv(batch.length ? batch : filtered, library.collections);
+          break;
+        case 'select-all':
+          setBulk(filtered.map((entry) => entry.id));
+          break;
+        case 'rename-item':
+          focus('[aria-label="Item title"]');
+          break;
+        case 'trash':
+          void applyBulk(
+            batch
+              .filter((entry) => !entry.trashed)
+              .map((entry) => ({
+                id: entry.id,
+                patch: { trashed: true, expectedRevision: entry.revision },
+              })),
+          );
+          break;
+        case 'search':
+          focus('[aria-label="Search library"]');
+          break;
+        case 'filter-folders':
+          focus('[aria-label="Filter folders"]');
+          break;
+        case 'filters':
+          document.querySelector<HTMLElement>('.filter-shell > summary')?.click();
+          break;
+        case 'tags':
+          focus('[aria-label="Tags"]');
+          break;
+        case 'membership':
+          document.querySelector<HTMLElement>('.folder-membership > summary')?.click();
+          break;
+        case 'ai':
+          if (!dirty) setShowAI(true);
+          break;
+        case 'grid':
+        case 'table':
+        case 'justified':
+        case 'waterfall':
+          if (item?.kind === 'note') setSelected(null);
+          setImageDetail(false);
+          setView(command);
+          break;
+        case 'graph-tab':
+          addTab(undefined, true);
+          break;
+        case 'sidebar':
+          setPanels((current) => ({ ...current, left: !current.left }));
+          break;
+        case 'inspector':
+          setPanels((current) => ({ ...current, right: !current.right }));
+          break;
+        case 'panels':
+          setPanels((current) => {
+            if (!current.left && !current.right) return previousPanels.current;
+            previousPanels.current = current;
+            return { left: false, right: false };
+          });
+          break;
+        case 'smaller':
+          setTileSize((size) => Math.max(105, size - 10));
+          break;
+        case 'larger':
+          setTileSize((size) => Math.min(280, size + 10));
+          break;
+      }
+    }),
+  );
   function focusTile(button: HTMLButtonElement, key: string) {
     const tiles = Array.from(
       document.querySelectorAll<HTMLButtonElement>('.library-content .asset-open'),
@@ -1094,6 +1275,104 @@ function App() {
     setScope(value);
     setMenu(false);
   };
+  function workspaceState(): WorkspaceState {
+    return {
+      scope,
+      query,
+      types,
+      view,
+      selected,
+      imageDetail,
+      readingNoteId,
+      rules,
+      sort,
+      scroll: (item?.kind === 'note' ? editorHost : gallerySurface.current)?.scrollTop ?? 0,
+      split,
+    };
+  }
+  function activateTab(tab: WorkspaceTab) {
+    if (selected) void autosave.flush(selected);
+    const state = tab.state;
+    setTabId(tab.id);
+    setScope(state?.scope ?? 'all');
+    setQuery(state?.query ?? '');
+    setTypes(state?.types ?? {});
+    setView(state?.view ?? 'grid');
+    setSelected(state?.selected ?? null);
+    setImageDetail(state?.imageDetail ?? false);
+    setReadingNoteId(state?.readingNoteId ?? null);
+    setRules(state?.rules ?? []);
+    setSort(state?.sort ?? 'newest');
+    setSplit(state?.split ?? false);
+    setBulk([]);
+    setPreview(null);
+    setNoteDetails(false);
+    requestAnimationFrame(() => {
+      const view = document.querySelector<HTMLElement>(
+        state?.selected &&
+          library.items.some((entry) => entry.id === state.selected && entry.kind === 'note')
+          ? '.note-host'
+          : '.library-content',
+      );
+      if (view) view.scrollTop = state?.scroll ?? 0;
+    });
+  }
+  function switchTab(tab: WorkspaceTab) {
+    if (tab.id === tabId) return;
+    const remembered = workspaceState();
+    setTabs((previous) =>
+      previous.map((entry) =>
+        entry.id === tabId
+          ? {
+              ...entry,
+              title: item?.title || (view === 'graph' ? 'Graph' : title),
+              state: remembered,
+            }
+          : entry,
+      ),
+    );
+    activateTab(tab);
+  }
+  function addTab(open?: Item, graph = false) {
+    const remembered = workspaceState();
+    const tab: WorkspaceTab = {
+      id: crypto.randomUUID(),
+      title: open?.title ?? (graph ? 'Graph' : 'Library'),
+      state: {
+        scope: 'all',
+        query: '',
+        types: {},
+        view: graph ? 'graph' : 'grid',
+        selected: open?.id ?? null,
+        imageDetail: !!open?.mime.startsWith('image/'),
+        readingNoteId: null,
+        rules: [],
+        sort: 'newest',
+        scroll: 0,
+        split: false,
+      },
+    };
+    setTabs((previous) => [
+      ...previous.map((entry) =>
+        entry.id === tabId
+          ? {
+              ...entry,
+              title: item?.title || (view === 'graph' ? 'Graph' : title),
+              state: remembered,
+            }
+          : entry,
+      ),
+      tab,
+    ]);
+    activateTab(tab);
+  }
+  function closeTab(id: string) {
+    const index = tabs.findIndex((tab) => tab.id === id);
+    const continuing = tabs.filter((tab) => tab.id !== id);
+    if (!continuing.length) return;
+    setTabs(continuing);
+    if (id === tabId) activateTab(continuing[Math.max(0, index - 1)]);
+  }
   async function applyBulk(changes: { id: string; patch: ItemPatch }[]) {
     if (changes.some(({ id }) => autosave.drafts[id])) {
       setError('Let the selected items finish autosaving before updating them together.');
@@ -1153,15 +1432,10 @@ function App() {
     for (const file of Array.from(files)) {
       setUploading(`Importing ${++count} of ${files.length} · ${file.name}`);
       try {
-        const params = new URLSearchParams({ name: file.name });
-        if (scope.startsWith('collection:')) params.set('folder', scope.slice(11));
-        const res = await fetch(`/api/import?${params}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/octet-stream' },
-          body: file,
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        const data = await uploadAsset(
+          file,
+          scope.startsWith('collection:') ? scope.slice(11) : undefined,
+        );
         setSelected(data.id);
       } catch (e) {
         failures.push(`${file.name}: ${(e as Error).message}`);
@@ -1231,6 +1505,37 @@ function App() {
       await reload();
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+  async function handleFolderRemoval(restore = false) {
+    if (folderBusy) return;
+    setFolderBusy(true);
+    setError('');
+    try {
+      if (restore) {
+        const { id } = await api<{ id: string }>('/collections/undo', 'POST', {
+          ticket: folderUndo,
+        });
+        setFolderUndo('');
+        setNotice('Folder restored');
+        navigate('collection:' + id);
+      } else if (folderRemoval) {
+        const { ticket } = await api<{ ticket: string }>(
+          '/collections/' + folderRemoval.branch[0].id,
+          'DELETE',
+          { key: folderRemoval.key },
+        );
+        setFolderUndo(ticket);
+        if (folderRemoval.branch.some((entry) => 'collection:' + entry.id === scope))
+          navigate('all');
+        setFolderRemoval(undefined);
+      }
+      await reload();
+    } catch (problem) {
+      setError((problem as Error).message);
+      setFolderRemoval(undefined);
+    } finally {
+      setFolderBusy(false);
     }
   }
   function rememberSearch() {
@@ -1383,6 +1688,12 @@ function App() {
       onKeyDown={(e) => {
         if (e.key === 'Escape' && peek) stopPeek();
       }}
+      style={
+        {
+          '--left-width': panelWidths.left + 'px',
+          '--right-width': panelWidths.right + 'px',
+        } as React.CSSProperties
+      }
       className={`app ${inspectorOpen ? 'has-inspector' : ''} ${panels.left ? '' : 'hide-sidebar'} ${panels.right ? '' : 'hide-inspector'} ${item?.kind === 'note' ? 'editing-note' : ''} ${noteDetails ? 'show-note-details' : ''}`}
     >
       {menu && (
@@ -1393,6 +1704,11 @@ function App() {
         />
       )}
       <aside className={`sidebar ${menu ? 'open' : ''}`}>
+        <PanelResize
+          side="left"
+          width={panelWidths.left}
+          onResize={(width) => resizePanel('left', width)}
+        />
         <div className="brand">
           <div className="brand-mark">
             <Layers size={20} />
@@ -1477,21 +1793,69 @@ function App() {
         </div>
       </aside>
       <main
+        onCopy={(event) => {
+          if (
+            (event.target as HTMLElement).closest('input,textarea,[contenteditable="true"]') ||
+            window.getSelection()?.toString()
+          )
+            return;
+          const ids = bulk.length ? bulk : selected ? [selected] : [];
+          const entries = library.items.filter((entry) => ids.includes(entry.id));
+          if (!entries.length) return;
+          event.preventDefault();
+          event.clipboardData.setData(
+            'text/plain',
+            entries
+              .map((entry) =>
+                entry.kind === 'note' ? entry.body : entry.sourceUrl || entry.filename,
+              )
+              .join('\n\n'),
+          );
+          event.clipboardData.setData(
+            'application/x-atlas-items',
+            JSON.stringify(entries.map(({ id }) => id)),
+          );
+        }}
         onPaste={(e) => {
           if ((e.target as HTMLElement).closest('input,textarea,[contenteditable="true"]')) return;
-          const captures = Array.from(e.clipboardData.files)
-            .filter((file) => file.type.startsWith('image/'))
-            .map((file, n) => {
-              const extension =
-                file.type === 'image/jpeg'
-                  ? 'jpg'
-                  : file.type.split('/')[1].replace(/[^a-z0-9]/g, '');
-              return new window.File(
-                [file],
-                `Clipboard ${new Date().toISOString().replace(/[:.]/g, '-')}${n ? '-' + (n + 1) : ''}.${extension}`,
-                { type: file.type },
-              );
-            });
+          const copied = e.clipboardData.getData('application/x-atlas-items');
+          if (copied && folder) {
+            try {
+              const ids: unknown = JSON.parse(copied);
+              if (Array.isArray(ids)) {
+                const entries = active.filter(
+                  (entry) => ids.includes(entry.id) && !entry.collections.includes(folder.id),
+                );
+                if (entries.length) {
+                  e.preventDefault();
+                  void applyBulk(
+                    entries.map((entry) => ({
+                      id: entry.id,
+                      patch: {
+                        expectedRevision: entry.revision,
+                        collections: [...entry.collections, folder.id],
+                      },
+                    })),
+                  );
+                  return;
+                }
+              }
+            } catch {
+              /* Ignore data from a different app. */
+            }
+          }
+          const captures = Array.from(e.clipboardData.files).map((file, n) => {
+            if (!file.type.startsWith('image/')) return file;
+            const extension =
+              file.type === 'image/jpeg'
+                ? 'jpg'
+                : file.type.split('/')[1].replace(/[^a-z0-9]/g, '');
+            return new window.File(
+              [file],
+              `Clipboard ${new Date().toISOString().replace(/[:.]/g, '-')}${n ? '-' + (n + 1) : ''}.${extension}`,
+              { type: file.type },
+            );
+          });
           if (captures.length) {
             e.preventDefault();
             void importFiles(captures);
@@ -1593,6 +1957,16 @@ function App() {
                 >
                   Export selected files
                 </button>
+                <button
+                  onClick={() =>
+                    exportCsv(
+                      bulk.length ? filtered.filter((entry) => bulk.includes(entry.id)) : filtered,
+                      library.collections,
+                    )
+                  }
+                >
+                  Export metadata CSV
+                </button>
                 <a aria-label="Export metadata manifest" href="/api/manifest">
                   Export catalog JSON
                 </a>
@@ -1605,6 +1979,56 @@ function App() {
             </span>
           </div>
         </header>
+        <div className="workspace-tabs">
+          <div role="tablist" aria-label="Workspace tabs">
+            {tabs.map((tab) => (
+              <div className="workspace-tab" key={tab.id}>
+                <button
+                  role="tab"
+                  aria-selected={tab.id === tabId}
+                  type="button"
+                  title={tab.title}
+                  onClick={() => switchTab(tab)}
+                >
+                  {tab.id === tabId
+                    ? item?.title || (view === 'graph' ? 'Graph' : title)
+                    : tab.title}
+                </button>
+                {tabs.length > 1 && (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Close tab ${tab.title}`}
+                    onClick={() => closeTab(tab.id)}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="New workspace tab"
+            title="New tab"
+            onClick={() => addTab()}
+          >
+            <Plus size={15} />
+          </button>
+          {item?.kind === 'note' && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-pressed={split}
+              aria-label="Show note beside graph"
+              title="Show note beside graph"
+              onClick={() => setSplit(!split)}
+            >
+              <Network size={15} />
+            </button>
+          )}
+        </div>
         {item?.kind === 'note' && (
           <>
             {error && (
@@ -1620,7 +2044,23 @@ function App() {
                 </button>
               </div>
             )}
-            <div className="note-host" ref={setEditorHost} />
+            <div className={`note-workspace-layout ${split ? 'has-note-graph' : ''}`}>
+              <div className="note-host" ref={setEditorHost} />
+              {split && (
+                <GraphView
+                  key={item.id}
+                  workspaceKey={tabId + ':note:' + item.id}
+                  items={active}
+                  initialFocus={item.id}
+                  selected={null}
+                  onSelect={(id) => {
+                    const target = active.find((entry) => entry.id === id);
+                    if (target) addTab(target);
+                  }}
+                  onOpenTab={(entry) => addTab(entry)}
+                />
+              )}
+            </div>
           </>
         )}
         {imageDetail && item?.mime.startsWith('image/') && (
@@ -1827,6 +2267,7 @@ function App() {
                 </div>
               </div>
               <FilterStrip
+                catalog={active}
                 rules={rules}
                 setRules={setRules}
                 collections={library.collections}
@@ -2173,7 +2614,14 @@ function App() {
                     onMenu={(item, x, y) => setItemMenu({ item, x, y })}
                   />
                 ) : (
-                  <GraphView items={filtered} selected={selected} onSelect={select} />
+                  <GraphView
+                    key={tabId}
+                    workspaceKey={tabId}
+                    items={filtered}
+                    selected={selected}
+                    onSelect={select}
+                    onOpenTab={(entry) => addTab(entry)}
+                  />
                 )}
               </section>
             </>
@@ -2184,7 +2632,14 @@ function App() {
       {showAI && (
         <div className="ai-shade" onClick={() => setShowAI(false)}>
           <div onClick={(e) => e.stopPropagation()}>
-            <AiPanel item={item} onClose={() => setShowAI(false)} onApplied={reload} />
+            <AiPanel
+              item={item}
+              selected={active.filter((entry) => bulk.includes(entry.id))}
+              catalog={active}
+              collections={library.collections}
+              onClose={() => setShowAI(false)}
+              onApplied={reload}
+            />
           </div>
         </div>
       )}
@@ -2204,6 +2659,11 @@ function App() {
       )}
       {panels.right && (bulk.length > 0 || (!item && !!folder)) && (
         <aside className="inspector selection-inspector">
+          <PanelResize
+            side="right"
+            width={panelWidths.right}
+            onResize={(width) => resizePanel('right', width)}
+          />
           <div className="inspector-heading">
             <span>{bulk.length ? 'SELECTION' : 'DETAILS'}</span>
           </div>
@@ -2235,6 +2695,9 @@ function App() {
         <Inspector
           key={item.id}
           item={item}
+          width={panelWidths.right}
+          onResize={(width) => resizePanel('right', width)}
+          onConvert={setConverting}
           items={library.items}
           collections={library.collections}
           onClose={() => {
@@ -2252,6 +2715,15 @@ function App() {
           onRestore={restore}
           editorHost={editorHost}
           onOpen={select}
+          workspaceKey={tabId + ':note:' + item.id}
+          onImport={async (file, tags) => {
+            const asset = await uploadAsset(file, undefined, tags);
+            setLibrary((previous) => ({
+              ...previous,
+              items: [asset, ...previous.items.filter((entry) => entry.id !== asset.id)],
+            }));
+            return asset;
+          }}
           onColorFilter={(color) => {
             setRules((current) => [
               ...current.filter((r) => r.field !== 'color'),
@@ -2271,6 +2743,14 @@ function App() {
           label="Folder actions"
           onClose={() => setFolderMenu(undefined)}
           actions={[
+            {
+              label: 'Delete folder…',
+              run: () => {
+                api<NonNullable<typeof folderRemoval>>('/collections/' + folderMenu.folder.id)
+                  .then(setFolderRemoval)
+                  .catch((problem: Error) => setError(problem.message));
+              },
+            },
             { label: 'New subfolder', run: () => void create('collection', folderMenu.folder.id) },
             {
               label: 'Rename folder',
@@ -2298,6 +2778,7 @@ function App() {
           y={itemMenu.y}
           onClose={() => setItemMenu(null)}
           actions={[
+            { label: 'Open in new tab', run: () => addTab(itemMenu.item) },
             { label: 'Quick Preview', run: () => setPreview(itemMenu.item.id) },
             ...(window.atlasDesktop &&
             itemMenu.item.kind === 'asset' &&
@@ -2472,6 +2953,57 @@ function App() {
             </button>
           </div>
         </WorkspaceDialog>
+      )}
+      {converting && <ImageExport item={converting} onClose={() => setConverting(undefined)} />}
+      {folderRemoval && (
+        <WorkspaceDialog
+          title="Delete folder"
+          onClose={() => {
+            if (!folderBusy) setFolderRemoval(undefined);
+          }}
+        >
+          <h2>Delete {folderRemoval.branch[0].title ?? folderRemoval.branch[0].name}?</h2>
+          <p>
+            {folderRemoval.branch.length - 1} subfolders and {folderRemoval.affected} items are
+            affected. Items stay in your library.
+          </p>
+          <div className="workspace-button-row">
+            <button
+              className="secondary"
+              disabled={folderBusy}
+              onClick={() => setFolderRemoval(undefined)}
+            >
+              Cancel
+            </button>
+            <button
+              className="primary"
+              disabled={folderBusy}
+              onClick={() => void handleFolderRemoval()}
+            >
+              Delete folder
+            </button>
+          </div>
+        </WorkspaceDialog>
+      )}
+      {folderUndo && (
+        <div className="toast folder-undo" role="status">
+          Folder removed{' '}
+          <button
+            className="text-button"
+            disabled={folderBusy}
+            onClick={() => void handleFolderRemoval(true)}
+          >
+            Undo folder deletion
+          </button>
+          <button
+            className="icon-button"
+            title="Dismiss"
+            aria-label="Dismiss folder undo"
+            onClick={() => setFolderUndo('')}
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
       {notice && (
         <div className="toast" role="status">

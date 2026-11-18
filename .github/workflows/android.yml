@@ -3,7 +3,7 @@ on:
   push:
     tags: ['android-v*']
   pull_request:
-    paths: ['android/**', 'server/**', 'shared/**', 'scripts/transfer-fixture.ts', '.github/workflows/android.yml']
+    paths: ['android/**', 'server/**', 'shared/**', 'scripts/transfer-fixture.ts', 'scripts/test-android-preview.sh', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -50,19 +50,11 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            gradle -p android --no-daemon connectedDebugAndroidTest
-            adb exec-out run-as cool.atlas.library tar -C files -cf - interop-backup > android/interop-backup.tar
-            tar -xf android/interop-backup.tar -C android
-            node --import tsx scripts/transfer-fixture.ts verify
-            adb uninstall cool.atlas.library
-            adb install android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n cool.atlas.library/.MainActivity
-            adb shell screencap -p /sdcard/atlas-android.png
-            adb pull /sdcard/atlas-android.png android/atlas-android.png
+            bash scripts/test-android-preview.sh
       - name: Prepare APK
         run: |
           mkdir -p android/downloads
-          cp android/app/build/outputs/apk/debug/app-debug.apk android/downloads/Atlas-0.3.0-android-preview.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk android/downloads/Atlas-0.4.2-android-preview.apk
           cd android/downloads
           sha256sum *.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
@@ -91,4 +83,4 @@ jobs:
       - name: Publish Android preview
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "Atlas Android 0.3 preview" --prerelease --notes-file docs/ANDROID.md downloads/*
+        run: gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "Atlas Android 0.4 preview" --prerelease --notes-file docs/ANDROID.md downloads/*
