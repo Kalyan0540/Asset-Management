@@ -1,22 +1,29 @@
-# Implementation status — Atlas 0.4 desktop and Android preview
+# Implementation status — Atlas 0.5 desktop and Android preview
 
 18 November 2026. This is an early personal desktop release. The complete R1 plan is **not finished**. The implementation now has native desktop packaging; it is no longer only a browser prototype.
+
+## New in 0.5
+
+- Compact desktop gallery and inspector with System, Light and Dark appearance, panel toggles, captions below thumbnails, and temporary image/video peeks. The persistent image preview has zoom and grayscale.
+- Real folder parent relationships, a descendant-aware gallery and counts, and previewable repair for earlier flattened Eagle imports. Branch repair keeps existing IDs and memberships.
+- In-app library switcher, clipboard image import, searchable item actions, recent searches, selection summary, selected-file export and Trash Undo. Original-file export and library backups remain separate.
+- Smart Folders hold all/any conditions. Optional actions apply on future file imports. The All Tags workspace supports groups. The generic local MCP connection continues to work through the Agents menu.
 
 ## New in 0.4
 
 - Quick Preview button on gallery cards, Grid/Justified/Waterfall arrangements, compact navigation, inline folder naming, and an image inspector with dimensions and copyable color swatches.
 - Center Markdown workspace with slash commands, rendered reading mode, image embeds, links to saved items and links shown in the relations graph. The editor saves Markdown source with the existing revision checks.
-- Local Codex MCP setup copied from the Agents menu. Adds note text search and bounded image reads. Hosted ChatGPT access, smart folders and automatic rules remain pending.
+- Local Codex MCP setup copied from the Agents menu. Adds note text search and bounded image reads. Hosted ChatGPT access remains pending.
 
 ## New in 0.3
 
-- Desktop Eagle import copies into a separate Atlas library, verifies originals, maps folders/tags/annotations/dates, preserves raw source metadata, reports skips and supports cancellation. Compatibility evidence is documented in EAGLE_IMPORT.md; no private real-world library has been supplied.
+- Desktop Eagle import copies into a separate Atlas library, verifies originals, maps folders/tags/annotations/dates, preserves raw source metadata, reports skips and supports cancellation. Compatibility evidence is documented in EAGLE_IMPORT.md; the supplied import report informed legacy folder repair, while verification uses synthetic libraries.
 - Native Android source implements offline files, notes, tags, collections, favorites, Trash, search, previews through native decoders/external viewers, and share/file-picker imports. It uses the same schema-1 catalog and hash-addressed originals as desktop.
 - Manual desktop/Android backup transfer verifies originals before switching libraries. It is not synchronization. Android compile/lint/emulator and cross-platform backup checks gate APK publication. Published release runs, not these source descriptions, establish build success.
 
 ## Available functionality
 
-- Minimal dark workspace, with left collections/tags navigation, a denser asset grid, a right details panel, adjustable thumbnails, sorting, search, table view and a bounded relation graph.
+- Compact light and dark workspace, with left collections/tags navigation, a denser asset grid, a right details panel, adjustable thumbnails, sorting, search, table view and a bounded relation graph.
 - File import preserving originals, shared blob storage for identical bytes, image/video/audio/text previews, original export and Markdown note creation/source editing.
 - Tags, multiple collection memberships, favorites, explicit typed relations, reversible trash and revision history.
 - Atomic bulk tagging/collection/favorite/trash edits. If any selected revision is stale, the whole batch rolls back.
@@ -31,7 +38,7 @@ See [Getting Started](GETTING_STARTED.md) for nontechnical installation instruct
 
 ## Testing
 
-Local checks cover formatting, TypeScript/production build, twelve integration tests across persistence, conflicts, import/export, backup/restore, bulk transactions, AI review and real MCP stdio clients. Browser tests include the original desktop/mobile-size workflows plus bulk edits and the larger preview. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs repeat the checks and additionally test the packaged application on macOS/Windows, including native backup/restore and a real MCP client launched through the bundled runtime.
+Local checks cover formatting, TypeScript/production build, fourteen integration tests across persistence, conflicts, import/export, backup/restore, bulk transactions, AI review and real MCP stdio clients. Browser tests include the original desktop/mobile-size workflows plus bulk edits and the larger preview. Linux Electron runtime testing opens the UI and exercises database access. Platform release jobs repeat the checks and additionally test the packaged application on macOS/Windows, including native backup/restore and a real MCP client launched through the bundled runtime.
 
 AI tests use a deterministic local HTTP model fixture. They establish protocol, review and integrity behavior; they do not establish real-model caption accuracy or hardware performance. An installed Ollama vision model is needed to analyze actual pictures. No hosted inference is enabled by default.
 
@@ -45,7 +52,7 @@ AI tests use a deterministic local HTTP model fixture. They establish protocol, 
 | Migration | Real-world Eagle fixture validation, additional layouts/.eaglepack support and incremental merge; richer Obsidian import; import Markdown assets as editable notes |
 | Knowledge tools | External Markdown reconciliation, autosaved drafts, rendered editing, wiki-link resolution/backlinks, embeds, custom property schemas, independent records, formulas and rollups |
 | AI | Provider credentials, hosted adapters, model installation, persisted work queue/resume, OCR, embeddings, visual similarity, controlled-vocabulary rules and evaluation sets |
-| Organization/media | Nested/smart collections, tag groups and merging, more filters, EXIF/palettes, thumbnails/proxies, specialized design/3D/font formats |
+| Organization/media | Folder moves and merging, tag merge and rename, richer filter operators, EXIF, generated video posters, thumbnails/proxies, and specialist formats |
 | Scale | Indexed/paginated queries, virtualized grid, 50,000-item and multi-GB media benchmarking |
 | Security/release | Per-agent scopes, key recovery, tested migrations, updater, verified publisher signing, Apple notarization and long-term acceptance testing |
 
