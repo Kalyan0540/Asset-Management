@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { ArrowLeft, Link2 } from 'lucide-react';
@@ -49,6 +49,14 @@ export function NoteEditor({
   setRendered: (rendered: boolean) => void;
 }) {
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const cursorAfterEdit = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (cursorAfterEdit.current === null || !textarea.current) return;
+    const cursor = cursorAfterEdit.current;
+    cursorAfterEdit.current = null;
+    textarea.current.focus();
+    textarea.current.setSelectionRange(cursor, cursor);
+  });
   const [slash, setSlash] = useState<{ start: number; end: number; query: string } | null>(null);
   const [link, setLink] = useState<{ start: number; end: number } | null>(null);
   const [query, setQuery] = useState('');
@@ -63,13 +71,10 @@ export function NoteEditor({
   const replace = (start: number, end: number, text: string, cursor = text.length) => {
     const body = item.body.slice(0, start) + text + item.body.slice(end);
     if (body.length > 1_000_000) return;
+    cursorAfterEdit.current = start + cursor;
     onChange('body', body);
     setSlash(null);
     setLink(null);
-    requestAnimationFrame(() => {
-      textarea.current?.focus();
-      textarea.current?.setSelectionRange(start + cursor, start + cursor);
-    });
   };
   const openPicker = (range: { start: number; end: number }) => {
     setRendered(false);

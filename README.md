@@ -8,9 +8,9 @@ The desktop app imports Eagle libraries and includes tags, folders, previews, a 
 
 | Device | Installer |
 |---|---|
-| Mac with Apple chip (M1 or newer) | [Atlas 0.5.0 for Apple chip](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.0/Atlas-0.5.0-mac-arm64.dmg) |
-| Mac with Intel processor | [Atlas 0.5.0 for Intel Mac](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.0/Atlas-0.5.0-mac-x64.dmg) |
-| Windows with Intel or AMD processor | [Atlas 0.5.0 for Windows](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.0/Atlas-0.5.0-win-x64.exe) |
+| Mac with Apple chip (M1 or newer) | [Atlas 0.5.1 for Apple chip](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.1/Atlas-0.5.1-mac-arm64.dmg) |
+| Mac with Intel processor | [Atlas 0.5.1 for Intel Mac](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.1/Atlas-0.5.1-mac-x64.dmg) |
+| Windows with Intel or AMD processor | [Atlas 0.5.1 for Windows](https://github.com/Kalyan0540/Asset-Management/releases/download/v0.5.1/Atlas-0.5.1-win-x64.exe) |
 | Android 8.0 or newer | [Atlas Android preview APK](https://github.com/Kalyan0540/Asset-Management/releases/download/android-v0.3.0-preview/Atlas-0.3.0-android-preview.apk) |
 
 See the [desktop installation guide](docs/GETTING_STARTED.md), the [Android setup guide](docs/ANDROID.md), or [all GitHub releases](https://github.com/Kalyan0540/Asset-Management/releases).

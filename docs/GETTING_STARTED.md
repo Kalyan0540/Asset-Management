@@ -10,9 +10,9 @@ Open [Atlas downloads](https://github.com/Kalyan0540/Asset-Management/releases) 
 
 | Your computer | File to choose |
 |---|---|
-| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.5.0-mac-arm64.dmg` |
-| Mac with an Intel processor | `Atlas-0.5.0-mac-x64.dmg` |
-| Windows computer with an Intel/AMD processor | `Atlas-0.5.0-win-x64.exe` |
+| Mac with Apple M1, M2, M3, M4 or later Apple chip | `Atlas-0.5.1-mac-arm64.dmg` |
+| Mac with an Intel processor | `Atlas-0.5.1-mac-x64.dmg` |
+| Windows computer with an Intel/AMD processor | `Atlas-0.5.1-win-x64.exe` |
 
 To check your Mac, click the **Apple menu → About This Mac**. “Chip: Apple …” means use the Apple chip download. “Processor: Intel …” means use the Intel download.
 
