@@ -13,6 +13,7 @@
 
 - [Project plan](PROJECT_PLAN.md) and [feature backlog](FEATURE_BACKLOG.csv)
 - [Workspace research](WORKSPACE_RESEARCH.md), [Eagle research](RESEARCH.md), and [open-source options](OPEN_SOURCE_OPTIONS.md)
+- [Eagle browser extension references](EAGLE_EXTENSION_REFERENCES.md)
 - [Implementation status](IMPLEMENTATION_STATUS.md)
 - [Mobile capture exploration](MOBILE_CAPTURE_PLAN.md)
 - [Original project context and continuation notes](PROJECT_CONTEXT.md)
