@@ -10,6 +10,7 @@
 - [Release notes](RELEASE_NOTES.md)
 
 ## Design and planning
+- [Design review handoff with plans and screenshots](design-review/README.md)
 
 - [Project plan](PROJECT_PLAN.md) and [feature backlog](FEATURE_BACKLOG.csv)
 - [Workspace research](WORKSPACE_RESEARCH.md), [Eagle research](RESEARCH.md), and [open-source options](OPEN_SOURCE_OPTIONS.md)
